@@ -3578,7 +3578,8 @@ task.spawn(function()
 end)
 --============================================================
 -- RESPAWN
---============================================================TrackConnection(LocalPlayer.CharacterAdded:Connect(function(newCharacter)
+--============================================================
+TrackConnection(LocalPlayer.CharacterAdded:Connect(function(newCharacter)
     STATE.Character = newCharacter
     STATE.HumanoidRootPart = newCharacter:WaitForChild("HumanoidRootPart")
     STATE.Humanoid = newCharacter:WaitForChild("Humanoid")
