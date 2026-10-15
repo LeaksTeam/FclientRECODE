@@ -7,6 +7,7 @@
 -- + Crosshair (5 прицелов как в CS2 + Rainbow)
 -- + Third Person Head Fix (голова теперь есть)
 -- + Keybinds: фиолетовый текст во всех темах
+-- + Skate Effect (2 режима) + Delayed/Instant Kill
 --================================================================
 --============================================================
 -- STATE
@@ -20,7 +21,7 @@ local STATE = {
     FLY_HEIGHT = 5,
     haltWarned = false,
     LastPadlockFire = 0,
-    PADLOCK_COOLDOWN = 0.6,
+    PADLOCK_COOLDOWN = 0.4,
     PadlockAttempts = 0,
     AutoInteractDebug = false,
     PROMPT_COOLDOWN = 0.05,
@@ -96,20 +97,12 @@ task.spawn(function()
     print("[LOLHAX] GameReady = true")
 end)
 --============================================================
--- SPLASH SCREEN  (F -> FCLIENT -> улетает вверх -> появляется GUI)
+-- SPLASH SCREEN
 --============================================================
--- Оптимизации против лагов:
---  * без BlurEffect (размытие всего экрана очень дорогое на слабых ПК);
---  * без UIGradient / UIStroke на крупном тексте;
---  * логотип лежит в CanvasGroup: он рендерится один раз, а движение и
---    прозрачность работают как с готовой картинкой;
---  * анимация стартует только ПОСЛЕ того, как библиотека загружена и меню
---    собрано (пока идёт загрузка, показывается статичное затемнение).
 STATE.SplashReady = false
 STATE.UIBuilt = false
-STATE.SplashDone = false   -- true только когда заставка ПОЛНОСТЬЮ закончилась (до этого конфиг не грузится)
+STATE.SplashDone = false
 STATE.SplashGui = nil
--- Скорость заставки: больше число = медленнее (1 = быстро, 1.8 = спокойно, 2.5 = очень медленно)
 local SPLASH_SPEED = 1.2
 local function PlaySplash()
     local TextService = game:GetService("TextService")
@@ -134,7 +127,6 @@ local function PlaySplash()
         tween:Play()
         return tween
     end
-    -- затемнение экрана
     local dim = Instance.new("Frame")
     dim.Size = UDim2.fromScale(1, 1)
     dim.BackgroundColor3 = Color3.new(0, 0, 0)
@@ -153,13 +145,11 @@ local function PlaySplash()
     loading.TextColor3 = ACCENT
     loading.TextTransparency = 0.2
     loading.Parent = gui
-    -- ждём, пока скрипт загрузит библиотеку и соберёт меню (тяжёлая часть)
     local t0 = tick()
     while not STATE.UIBuilt and tick() - t0 < 40 do task.wait(0.05) end
     for _ = 1, 12 do RunService.Heartbeat:Wait() end
     task.wait(0.6)
     loading:Destroy()
-    -- Размеры
     local vp = (Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize) or Vector2.new(1280, 720)
     local textSize = math.clamp(math.floor(vp.Y * 0.12), 48, 110)
     local H = textSize + 16
@@ -168,7 +158,6 @@ local function PlaySplash()
     local total = fW + cW
     local PAD = 20
     local groupH = H + 56 + PAD
-    -- логотип целиком в CanvasGroup (рендерится один раз)
     local group = Instance.new("CanvasGroup")
     group.AnchorPoint = Vector2.new(0.5, 0.5)
     group.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -176,7 +165,6 @@ local function PlaySplash()
     group.BackgroundTransparency = 1
     group.GroupTransparency = 0
     group.Parent = gui
-    -- буква F: клип-фрейм раскрывается слева направо ("пишется")
     local fStartX = PAD + (total - fW) / 2
     local fClip = Instance.new("Frame")
     fClip.Position = UDim2.fromOffset(fStartX, PAD / 2)
@@ -194,7 +182,6 @@ local function PlaySplash()
     fLabel.TextColor3 = ACCENT
     fLabel.TextXAlignment = Enum.TextXAlignment.Left
     fLabel.Parent = fClip
-    -- слово CLIENT: вырастает из буквы F
     local clip = Instance.new("Frame")
     clip.Position = UDim2.fromOffset(PAD + fW, PAD / 2)
     clip.Size = UDim2.fromOffset(0, H)
@@ -217,7 +204,7 @@ local function PlaySplash()
     sub.Size = UDim2.fromOffset(total, 22)
     sub.BackgroundTransparency = 1
     sub.Font = Enum.Font.GothamMedium
-    sub.Text = "LITE  v1.8"
+    sub.Text = "RECODE"
     sub.TextSize = math.clamp(math.floor(textSize * 0.2), 12, 24)
     sub.TextColor3 = ACCENT
     sub.TextTransparency = 1
@@ -230,21 +217,16 @@ local function PlaySplash()
     line.BackgroundTransparency = 0.2
     line.BorderSizePixel = 0
     line.Parent = group
-    -- Анимация
-    -- 1) F "пишется"
     tw(fClip, D(1.4), { Size = UDim2.fromOffset(fW, H) }, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
     task.wait(D(1.7))
-    -- 2) F уезжает влево, из неё вырастает CLIENT
     tw(fClip, D(1.0), { Position = UDim2.fromOffset(PAD, PAD / 2) }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
     task.wait(D(0.4))
     tw(clip, D(1.2), { Size = UDim2.fromOffset(cW, H) }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
     tw(cLabel, D(1.0), { TextTransparency = 0 }, Enum.EasingStyle.Sine)
     task.wait(D(1.0))
-    -- 3) подпись и линия
     tw(sub, D(0.8), { TextTransparency = 0.1 }, Enum.EasingStyle.Sine)
     tw(line, D(1.0), { Size = UDim2.fromOffset(total, 2) }, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
     task.wait(D(1.7))
-    -- 4) FCLIENT улетает вверх, экран светлеет, появляется GUI
     STATE.SplashReady = true
     tw(group, D(0.95), { Position = UDim2.new(0.5, 0, -0.35, 0) }, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
     tw(group, D(0.8), { GroupTransparency = 1 }, Enum.EasingStyle.Sine, Enum.EasingDirection.In)
@@ -260,7 +242,7 @@ task.spawn(function()
         warn("[LOLHAX] splash failed:", err)
         if STATE.SplashGui then pcall(function() STATE.SplashGui:Destroy() end) STATE.SplashGui = nil end
     end
-    STATE.SplashReady = true -- что бы ни случилось, GUI не должен остаться скрытым
+    STATE.SplashReady = true
     STATE.SplashDone = true
 end)
 --============================================================
@@ -269,11 +251,8 @@ end)
 local Fluent           = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager      = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
--- В Fluent все элементы лежат в одной таблице Options.
--- Toggles = Options, чтобы старый код (Toggles.X.Value) работал без правок.
 local Options = Fluent.Options
 local Toggles = Fluent.Options
--- Шим: весь остальной код использует Library.Unloaded
 local Library = { Unloaded = false }
 --============================================================
 -- STATIC DATABASE
@@ -368,11 +347,6 @@ end)
 local IsFurnitureName, GetSpecificEntityType, IsMonsterEntity,
       IsArchiveKeywordEntity, IsArchiveMonster, IsLotusPetal
 task.spawn(function()
-    -- ОПТИМИЗАЦИЯ: кэш по ИМЕНИ объекта.
-    -- В комнатах тысячи объектов с одинаковыми именами ("Part", "Wall", "Light"...),
-    -- поэтому поиск ключевых слов (string.find в циклах) выполняется один раз на имя,
-    -- а не на каждый новый объект. Для "пустых" объектов больше не создаются записи
-    -- в покомпонентных кэшах (меньше мусора и работы при загрузке большой комнаты).
     local FurnitureNameCache = {}
     local SpecificNameCache  = {}
     local ArchiveNameCache   = {}
@@ -387,7 +361,6 @@ task.spawn(function()
         FurnitureNameCache[lower] = res
         return res
     end
-    -- имя -> displayName | "Honcho" | false
     local function MatchSpecificName(name)
         local m = SpecificNameCache[name]
         if m ~= nil then return m end
@@ -444,7 +417,6 @@ task.spawn(function()
             if cached == false then return nil end
             return cached
         end
-        -- прямой поиск в таблице по имени: дешевле любого кэша, поэтому false не запоминаем
         local disp = StaticDB.MONSTER_NAMES[obj.Name]
         if not disp then return nil end
         if not (obj:IsA("Model") or obj:IsA("BasePart")) then return nil end
@@ -670,28 +642,16 @@ end
 --============================================================
 local LiveModifiers = ReplicatedStorage:FindFirstChild("LiveModifiers")
 --============================================================
--- WORLD WATCHER  (единый оптимизированный мониторинг Workspace.DescendantAdded)
+-- WORLD WATCHER
 --============================================================
--- Раньше каждая функция вешала СВОЙ Workspace.DescendantAdded и на КАЖДЫЙ новый объект
--- создавала task.defer / task.delay. Когда подгружается большая комната (тысячи объектов),
--- за один кадр создавались тысячи потоков -> сильный лаг.
--- Теперь:
---  * одно подключение DescendantAdded, которое только кладёт объект в очередь (почти бесплатно);
---  * если ни одна функция не включена, объекты вообще не попадают в очередь;
---  * очередь разбирается в Heartbeat с лимитом времени на кадр (Budget), поэтому большая
---    комната обрабатывается за несколько кадров без фризов;
---  * объект обрабатывается не раньше, чем через Delay сек после появления (успевают
---    подгрузиться дочерние части модели) — вместо отдельного task.delay на каждый объект;
---  * при ВКЛЮЧЕНИИ функции запускается полный скан уже существующих объектов
---    (Watcher.Scan, тоже по бюджету), а не только ожидание новых объектов.
 local Watcher = {
-    Handlers = {},       -- name -> handler
-    Order = {},          -- обработчики в порядке регистрации
+    Handlers = {},
+    Order = {},
     AnyActive = false,
     Queue = {}, Times = {}, Head = 1, Tail = 0,
-    Delay = 0.2,         -- задержка перед обработкой нового объекта
-    Budget = 0.0025,     -- сек на кадр для очереди новых объектов
-    ScanBudget = 0.002,  -- сек на кадр для полного скана
+    Delay = 0.2,
+    Budget = 0.0025,
+    ScanBudget = 0.002,
     ScanGen = {},
 }
 do
@@ -702,7 +662,6 @@ do
     local function RunHandler(h, obj)
         if h.Filter(obj) then h.Handle(obj) end
     end
-    -- Пересчитать, какие обработчики сейчас активны
     function Watcher.Refresh()
         local any = false
         for _, h in ipairs(Watcher.Order) do
@@ -711,13 +670,11 @@ do
         end
         Watcher.AnyActive = any
         if not any then
-            -- никому не нужно: очищаем очередь, чтобы не держать ссылки на объекты
             Watcher.Queue, Watcher.Times = {}, {}
             Watcher.Head, Watcher.Tail = 1, 0
         end
         return any
     end
-    -- def = { IsEnabled = fn() -> bool, Filter = fn(obj) -> bool (дешёвая проверка), Handle = fn(obj) }
     function Watcher.Register(name, def)
         def.Name = name
         def.Active = false
@@ -744,9 +701,6 @@ do
             end
         end
     end
-    -- Полный скан уже существующих объектов для одного обработчика.
-    -- Идёт по детям Workspace по очереди и делит работу на кадры, чтобы не было фриза.
-    -- Повторный вызов для того же обработчика отменяет предыдущий скан.
     function Watcher.Scan(name, roots)
         local h = Watcher.Handlers[name]
         if not h then return end
@@ -782,14 +736,12 @@ do
             end
         end)
     end
-    -- Скан всего для всех активных обработчиков
     function Watcher.ScanAll()
         Watcher.Refresh()
         for _, h in ipairs(Watcher.Order) do
             if h.Active then Watcher.Scan(h.Name) end
         end
     end
-    -- Единственное подключение DescendantAdded: только запись в очередь
     TrackConnection(Workspace.DescendantAdded:Connect(function(obj)
         if not Watcher.AnyActive then return end
         local t = Watcher.Tail + 1
@@ -797,7 +749,6 @@ do
         Watcher.Queue[t] = obj
         Watcher.Times[t] = os.clock()
     end))
-    -- Разбор очереди с лимитом времени на кадр
     TrackConnection(RunService.Heartbeat:Connect(function()
         if Watcher.Head > Watcher.Tail then return end
         if Library.Unloaded then return end
@@ -822,7 +773,6 @@ do
             Watcher.Head, Watcher.Tail = 1, 0
         end
     end))
-    -- Периодически обновляем флаги активности (если тумблер переключили без Refresh)
     task.spawn(function()
         while not Library.Unloaded do
             task.wait(0.5)
@@ -995,7 +945,6 @@ task.spawn(function()
         if entry.bb then pcall(function() entry.bb:Destroy() end) end
         STATE.HighlightRegistry[obj] = nil
     end
-    -- мониторинг новых объектов через общий Watcher (без task.defer на каждый объект)
     Watcher.Register("MonsterHighlight", {
         IsEnabled = function() return MonsterHighlight.Enabled end,
         Filter = function(obj) return IsArchiveMonster(obj) end,
@@ -1011,7 +960,6 @@ task.spawn(function()
     end))
     StartMonsterHighlight = function()
         MonsterHighlight.Enabled = true
-        -- сразу сканируем уже существующие объекты, а не только ждём новые
         Watcher.Scan("MonsterHighlight")
         print("[LOLHAX] Monster Highlight: ON")
     end
@@ -1081,7 +1029,6 @@ task.spawn(function()
     end))
     StartLotusPetalHighlight = function()
         LotusPetalHighlight.Enabled = true
-        -- полный скан по бюджету (без фриза на больших картах)
         Watcher.Scan("LotusPetalHighlight")
         print("[LOLHAX] Lotus Petal Highlight: ON")
     end
@@ -1457,7 +1404,6 @@ end)
 --============================================================
 local function SetToggleTitle(t, text)
     if not t then return end
-    -- в разных версиях Fluent SetTitle вызывается либо через ":", либо через "."
     local ok = pcall(function() t:SetTitle(text) end)
     if not ok then pcall(function() t.SetTitle(text) end) end
 end
@@ -1502,7 +1448,6 @@ task.spawn(function()
         if not hum then return 0 end
         return 0.075 * (hum.MaxHealth - hum.Health)
     end
-    -- Точная копия Functions.GetCurrentSpeed из Abysall
     local function GetCurrentSpeed()
         local char = LocalPlayer.Character
         if not char then return 15 end
@@ -1603,8 +1548,6 @@ task.spawn(function()
         RemoveAccelState.PartProperties = {}
         RemoveAccelState.CustomPhysics = nil
     end
-    -- ОПТИМИЗАЦИЯ: раньше слушался весь Workspace.DescendantAdded (каждая деталь новой комнаты
-    -- проверялась через IsDescendantOf). Теперь слушаем только своего персонажа.
     local function HookCharacterParts(character)
         if RemoveAccelState.DescConn then
             pcall(function() RemoveAccelState.DescConn:Disconnect() end)
@@ -2020,14 +1963,10 @@ RunService:BindToRenderStep("LOLHAX_FOV", Enum.RenderPriority.Camera.Value - 1, 
 -- THIRD PERSON
 --============================================================
 local ThirdPerson = { Enabled = false, WallCheck = false, ShowHead = true, Offset = Vector3.new(1.5, 1, 5) }
--- держатель "спрятанных" частей тела в третьем лице (голова и аксессуары)
 local ThirdPersonHidden = {}
--- снапшот оригинальных значений видимости головы за текущую сессию ThirdPerson
 local ThirdPersonSession = nil
 local function RestoreThirdPersonSession()
     if not ThirdPersonSession then return end
-    -- восстанавливаем ТОЧНО ТЕ ЖЕ instance, которые были захвачены при старте сессии
-    -- (не ищем через LocalPlayer.Character — он может быть уже заменён после респауна)
     local s = ThirdPersonSession
     if s.head and s.head.Parent then
         pcall(function()
@@ -2068,7 +2007,6 @@ local function HideThirdPersonHead(char)
         head.LocalTransparencyModifier = 1
         head.Transparency = 1
     end
-    -- волосы / шляпы / всё, что на голове
     for _, acc in ipairs(char:GetChildren()) do
         if acc:IsA("Accessory") then
             local handle = acc:FindFirstChild("Handle") or acc:FindFirstChildWhichIsA("BasePart", true)
@@ -2090,8 +2028,6 @@ end
 task.spawn(function()
     local ThirdPersonRayParams = RaycastParams.new()
     ThirdPersonRayParams.FilterType = Enum.RaycastFilterType.Exclude
-    -- BindToRenderStep с приоритетом AFTER Camera, чтобы голова и камера
-    -- обновлялись синхронно (без дерганья при быстром повороте камеры).
     local conn = nil
     local bindOk = pcall(function()
         RunService:BindToRenderStep("_LOLHAX_ThirdPerson", Enum.RenderPriority.Camera.Value + 1, function()
@@ -2107,13 +2043,7 @@ task.spawn(function()
             local cam = Workspace.CurrentCamera
             if not cam then return end
         if ThirdPerson.ShowHead then
-            -- ФИКС "нет башки": Roblox сам прячет голову через LocalTransparencyModifier
-            -- когда камера приближается. Мы сохраняем оригинальные значения ОДИН РАЗ за сессию
-            -- (ThirdPersonSession), жёстко возвращаем видимость каждый кадр,
-            -- и восстанавливаем только при выключении ThirdPerson.
             if not ThirdPersonSession then
-                -- сохраняем ССЫЛКИ на instance (не текущий character), чтобы
-                -- восстановление работало корректно даже после respawn
                 ThirdPersonSession = {
                     head = head,
                     face = head:FindFirstChild("face") and head.face:IsA("Decal") and head.face or nil,
@@ -2122,23 +2052,18 @@ task.spawn(function()
                     faceTr = (head:FindFirstChild("face") and head.face:IsA("Decal")) and head.face.Transparency or nil,
                     accessories = {},
                 }
-                -- только ГОЛОВНЫЕ аксессуары (проверяем через Weld/Attachment к Head)
                 for _, acc in ipairs(char:GetChildren()) do
                     if acc:IsA("Accessory") then
                         local handle = acc:FindFirstChild("Handle") or acc:FindFirstChildWhichIsA("BasePart", true)
                         if handle and handle:IsA("BasePart") then
-                            -- ПРОВЕРКА: handle приварен к Head через Weld или Attachment
                             local isHeadAcc = false
                             for _, child in ipairs(handle:GetChildren()) do
                                 if child:IsA("Attachment") then
-                                    local attParent = child.Parent
-                                    -- Attachment может быть на handle, но ссылается на Head attachment
                                     if child.Name:find("HatAttachment") or child.Name:find("HairAttachment") or child.Name:find("FaceFrontAttachment") or child.Name:find("FaceCenterAttachment") then
                                         isHeadAcc = true
                                     end
                                 end
                             end
-                            -- проверяем Weld к Head
                             for _, w in ipairs(acc:GetChildren()) do
                                 if w:IsA("Weld") and w.Part1 == head then isHeadAcc = true end
                                 if w:IsA("Weld") and w.Part0 == head then isHeadAcc = true end
@@ -2181,10 +2106,9 @@ task.spawn(function()
         end
         cam.CFrame = cam.CFrame * offset
         end)
-        conn = true -- флаг, что рендер-степ подключён
+        conn = true
     end)
     if not conn then
-        -- fallback: обычный RenderStepped (если BindToRenderStep недоступен)
         TrackConnection(RunService.RenderStepped:Connect(function()
             if Library.Unloaded or not ThirdPerson.Enabled then
                 if next(ThirdPersonHidden) ~= nil then RestoreThirdPersonHead() end
@@ -2200,7 +2124,6 @@ task.spawn(function()
             if ThirdPerson.ShowHead then
                 if next(ThirdPersonHidden) ~= nil then RestoreThirdPersonHead() end
                 if not ThirdPersonSession then
-                    -- снапшот (как выше)
                     ThirdPersonSession = {
                         head = head,
                         face = head:FindFirstChild("face") and head.face:IsA("Decal") and head.face or nil,
@@ -2808,8 +2731,6 @@ task.spawn(function()
         if Library.Unloaded or not STATE.GameReady then return end
         if not AutoInteract.Enabled then return end
         if not Options.GA_AutoInteract_K or not Options.GA_AutoInteract_K:GetState() then return end
-        -- ОПТИМИЗАЦИЯ: скан комнаты ~30 раз в секунду вместо каждого кадра
-        -- (у промптов и так кулдаун 0.05 сек, поэтому скорость не падает)
         local nowClock = os.clock()
         if nowClock - (AutoInteract.LastScan or 0) < 0.033 then return end
         AutoInteract.LastScan = nowClock
@@ -2824,7 +2745,6 @@ task.spawn(function()
         if not CurrentRoom then return end
         pcall(ScanRoomAI, CurrentRoom)
     end))
-    -- сброс кэша промптов при появлении нового ProximityPrompt (через общий Watcher и только когда функция включена)
     Watcher.Register("AutoInteractCache", {
         IsEnabled = function() return AutoInteract.Enabled end,
         Filter = function(obj) return obj:IsA("ProximityPrompt") end,
@@ -2904,8 +2824,6 @@ task.spawn(function()
         else msg = "Entity spawned nearby!" end
         Notify("Entity '" .. displayName .. "' spawned!", msg, 6)
     end
-    -- Раньше здесь на КАЖДЫЙ новый объект создавались 2 потока (task.delay + task.defer) —
-    -- именно это давало самый сильный лаг при появлении большой комнаты. Теперь через Watcher.
     Watcher.Register("EntityNotifier", {
         IsEnabled = function()
             return not Library.Unloaded and Toggles.GN_Enabled and Toggles.GN_Enabled.Value
@@ -2989,8 +2907,6 @@ end
 local function SolveAnchor()
     if not AutoSolveAnchorsState.Enabled then return end
     if tick() - AutoSolveAnchorsState.LastFire < 0.1 then return end
-    -- ОПТИМИЗАЦИЯ: GetCurrentAnchor перебирает GetDescendants() всех комнат —
-    -- делаем это не каждый кадр, а не чаще чем раз в 0.15 сек
     if tick() - (AutoSolveAnchorsState.LastCheck or 0) < 0.15 then return end
     AutoSolveAnchorsState.LastCheck = tick()
     local MainUI = LocalPlayer.PlayerGui:FindFirstChild("MainUI")
@@ -3057,8 +2973,6 @@ local WATCHED_NAMES = {
     BananaPeel = true,
     JeffTheKiller = true,
 }
--- Применяет bypass к ОДНОМУ объекту. БЕЗ проверки "уже применено" —
--- пусть перезаписывает каждый раз, это дешево и защищает от revert'а.
 local function ProcessOneObject(Object)
     if not Object or not Object.Parent then return end
     local Name = Object.Name
@@ -3126,13 +3040,11 @@ local function ProcessOneObject(Object)
         if Hum and Hum.Health > 0 then Hum.Health = 0 end
     end
 end
--- Рекурсивный сбор кандидатов (1-3 уровня, дешево)
 local function CollectCandidates(root, out)
     for _, obj in ipairs(root:GetChildren()) do
         if WATCHED_NAMES[obj.Name] then
             table.insert(out, obj)
         end
-        -- спускаемся в контейнеры, где обычно прячутся entity-объекты
         local n = obj.Name
         if n == "Assets" or n == "Blockage" or n == "Decor"
            or n == "Folder" or n == "Alternate" or n == "StandardDecor" then
@@ -3146,7 +3058,6 @@ local function ScanAll()
     if CurrentRooms then
         CollectCandidates(CurrentRooms, candidates)
     end
-    -- прямые дети Workspace (Snare, Lava, Jeff и т.п.)
     for _, obj in ipairs(Workspace:GetChildren()) do
         if WATCHED_NAMES[obj.Name] then
             table.insert(candidates, obj)
@@ -3156,7 +3067,6 @@ local function ScanAll()
         pcall(ProcessOneObject, obj)
     end
 end
--- Реакция на добавление (через общий Watcher; работает только когда включён хотя бы один bypass)
 local function AnyAntiEntityBypass()
     return AntiEntityState.BypassGiggle or AntiEntityState.BypassDupe
         or AntiEntityState.BypassGloombatEggs or AntiEntityState.BypassSeekObstructions
@@ -3171,8 +3081,7 @@ Watcher.Register("AntiEntity", {
         if Object and Object.Parent then ProcessOneObject(Object) end
     end,
 })
--- Реакция на смену свойств: если игра ревертит CanTouch/CanCollide — вернём обратно
-local watchedParts = setmetatable({}, { __mode = "k" })  -- weak keys, чтобы не течь
+local watchedParts = setmetatable({}, { __mode = "k" })
 local function WatchPart(part)
     if watchedParts[part] then return end
     watchedParts[part] = true
@@ -3183,7 +3092,6 @@ local function WatchPart(part)
         if part.Parent then pcall(ProcessOneObject, part.Parent) end
     end))
 end
--- Расширим ProcessOneObject обёрткой, чтобы вешать watch на дочерние части
 local _ProcessOneObject = ProcessOneObject
 ProcessOneObject = function(Object)
     _ProcessOneObject(Object)
@@ -3195,7 +3103,6 @@ ProcessOneObject = function(Object)
         end
     end
 end
--- Watchdog: раз в 1.5 сек пробегаемся по комнатам и переприменяем bypass
 task.spawn(function()
     while not Library.Unloaded do
         task.wait(1.5)
@@ -3210,7 +3117,6 @@ task.spawn(function()
         end
     end
 end)
--- Экспорт для вызова при включении тумблера (сразу скан всего + включение мониторинга)
 ScanAntiEntities = function()
     Watcher.Refresh()
     pcall(ScanAll)
@@ -3341,6 +3247,173 @@ task.spawn(function()
     end))
 end)
 --============================================================
+-- ALMA BYPASS
+--============================================================
+local AlmaBypass = {
+    Enabled = false,
+    Hooked = {},
+    Swapped = {},
+    RemovedEffects = {},
+}
+local ALMA_REMOTES = {
+    "AlmaMinigameFail",
+    "AlmaSpotted",
+    "AlmaChangeState",
+    "AlmaUpdateSynchronize",
+}
+local ALMA_KEYWORDS = {
+    "AlmaMinigameFail",
+    "AlmaSpotted",
+    "AlmaChangeState",
+    "AlmaUpdateSynchronize",
+    "Alma",
+}
+local function AlmaHookFunctions()
+    if not hookfunction or not getgc or not debug.getconstants then return end
+    local candidates = {}
+    for _, v in pairs(getgc(true)) do
+        if type(v) == "function" then
+            local ok, constants = pcall(function() return debug.getconstants(v) end)
+            if ok and type(constants) == "table" then
+                for _, const in ipairs(constants) do
+                    if type(const) == "string" then
+                        for _, kw in ipairs(ALMA_KEYWORDS) do
+                            if const:find(kw, 1, true) then
+                                table.insert(candidates, v)
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    for _, fn in ipairs(candidates) do
+        if AlmaBypass.Hooked[fn] then continue end
+        local ok = pcall(function()
+            local old = hookfunction(fn, newcclosure(function(...)
+                if not checkcaller() then return end
+                return old(...)
+            end))
+            AlmaBypass.Hooked[fn] = old
+        end)
+    end
+end
+local function AlmaSwapRemotes()
+    if not SwapRemoteObject then return end
+    local almaFolder = Workspace:FindFirstChild("Alma")
+    if not almaFolder then return end
+    for _, name in ipairs(ALMA_REMOTES) do
+        local remote = almaFolder:FindFirstChild(name)
+        if remote and (remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction")) then
+            if not AlmaBypass.Swapped[remote] then
+                pcall(function() SwapRemoteObject(remote, true) end)
+                AlmaBypass.Swapped[remote] = true
+            end
+        end
+    end
+end
+local function AlmaRemoveEffects()
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+    for _, name in ipairs({ "AlmaBlur", "AlmaColorCorrection" }) do
+        local effect = cam:FindFirstChild(name)
+        if effect and not AlmaBypass.RemovedEffects[effect] then
+            pcall(function() effect:Destroy() end)
+            AlmaBypass.RemovedEffects[effect] = true
+        end
+    end
+end
+local function AlmaWatch()
+    if Workspace:FindFirstChild("Alma") then
+        AlmaSwapRemotes()
+        AlmaRemoveEffects()
+    end
+    TrackConnection(Workspace.ChildAdded:Connect(function(child)
+        if not AlmaBypass.Enabled then return end
+        if child.Name == "Alma" then
+            task.wait(0.1)
+            AlmaSwapRemotes()
+            AlmaRemoveEffects()
+        end
+    end))
+    local cam = Workspace.CurrentCamera
+    if cam then
+        TrackConnection(cam.ChildAdded:Connect(function(child)
+            if not AlmaBypass.Enabled then return end
+            if child.Name == "AlmaBlur" or child.Name == "AlmaColorCorrection" then
+                task.wait(0.05)
+                if child and child.Parent then
+                    pcall(function() child:Destroy() end)
+                end
+            end
+        end))
+    end
+end
+local function AlmaDisableClient()
+    local rs = ReplicatedStorage
+    local fr = rs:FindFirstChild("FloorReplicated")
+    local cr = fr and fr:FindFirstChild("ClientRemote")
+    local ac = cr and cr:FindFirstChild("AlmaClient")
+    if not ac then return end
+    local fx = ac:FindFirstChild("AlmaFX")
+    if fx then
+        for _, obj in ipairs(fx:GetChildren()) do
+            if obj:IsA("Sound") or obj:IsA("BlurEffect") or obj:IsA("ColorCorrectionEffect") then
+                pcall(function() obj:Destroy() end)
+            end
+        end
+    end
+    local minigame = ac:FindFirstChild("Minigame")
+    if minigame then
+        pcall(function() minigame:Destroy() end)
+    end
+    for _, obj in ipairs(ac:GetDescendants()) do
+        if obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
+            local ok, env = pcall(function() return getsenv(obj) end)
+            if ok and type(env) == "table" then
+                for key, val in pairs(env) do
+                    if type(val) == "function" and not AlmaBypass.Hooked[val] then
+                        local name = debug.info(val, "n") or ""
+                        if name ~= "" and name ~= "wait" and name ~= "spawn"
+                           and name ~= "print" and name ~= "warn" and name ~= "error" then
+                            local okHook = pcall(function()
+                                local old = hookfunction(val, newcclosure(function(...)
+                                    if not checkcaller() then return end
+                                    return old(...)
+                                end))
+                                AlmaBypass.Hooked[val] = old
+                            end)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+function AlmaBypass.Start()
+    if AlmaBypass.Enabled then return end
+    AlmaBypass.Enabled = true
+    AlmaHookFunctions()
+    AlmaSwapRemotes()
+    AlmaRemoveEffects()
+    AlmaDisableClient()
+    AlmaWatch()
+    Notify("Alma Bypass", "Alma neutralized (hook + swap).", 4, true)
+end
+function AlmaBypass.Stop()
+    if not AlmaBypass.Enabled then return end
+    AlmaBypass.Enabled = false
+    for fn, old in pairs(AlmaBypass.Hooked) do
+        pcall(function() hookfunction(fn, old) end)
+    end
+    AlmaBypass.Hooked = {}
+    for remote, _ in pairs(AlmaBypass.Swapped) do
+        pcall(function() SwapRemoteObject(remote, false) end)
+    end
+    AlmaBypass.Swapped = {}
+end
+--============================================================
 -- [ABYSALL] POSITION SPOOF
 --============================================================
 local PositionSpoof = {
@@ -3431,16 +3504,6 @@ task.spawn(function()
             collisionClone.CollisionGroup = collision.CollisionGroup
             collisionClone.Position = hrp.Position + Vector3.new(0, PositionSpoof.Enabled and 1.75 or 0.18, 0)
         end
-        -- ФИКС "приседание меняет что Rush может убить": Position Spoof работает так,
-        -- что скрипт ЭМИТИТРует спуф-позицию каждый кадр через collision-объекты.
-        -- Если мы отправляем Crouch remote только при смене Crouching, то при активном
-        -- приседании Doors НЕ получает постоянный crouch-сигнал и спооф-состояние
-        -- ("на подземной высоте") сбрасывается → Rush может добраться и убить.
-        -- Решение: спамим FireServer(true, true) КАЖДЫЙ кадр, но НЕ мешаем физике
-        -- приседания — мы не трогаем hrp.CFrame, а только collision-объекты.
-        -- Чтобы не ломать физику приседания, отправляем с фиксированным интервалом
-        -- (0.1 сек), и НЕ перезапускаем анимацию — только споофим дистанцию.
-        -- Это восстанавливает защиту от Rush даже при активном приседании.
         local now = tick()
         if now - PositionSpoof.LastFire > 0.1 then
             local rf = ReplicatedStorage:FindFirstChild("RemotesFolder")
@@ -3449,8 +3512,6 @@ task.spawn(function()
             end
             PositionSpoof.LastFire = now
         end
-        -- при смене Crouching тоже отправляем сразу (чтобы спооф-состояние
-        -- не сбрасывалось при начале/конце приседания)
         local charCrouch = (char:GetAttribute("Crouching") == true)
         if charCrouch ~= PositionSpoof.LastCrouchState then
             PositionSpoof.LastCrouchState = charCrouch
@@ -3472,10 +3533,6 @@ task.spawn(function()
                 PositionSpoof.OldHipHeight = hum.HipHeight
             end
             if not PositionSpoof.OldFloor then
-                -- телепорт ПО ОДНОМУ КОРРЕКТНОМУ CFrame, без накопления смещения:
-                -- раньше включение позиционировало персонажа под землёй,
-                -- но приседание снова сдвигало его и он начинал "летать в воздухе".
-                -- Новый метод: сдвигаем root только один раз, физику держит collision-спуф.
                 if not PositionSpoof.SpoofOffsetApplied then
                     hrp.CFrame = hrp.CFrame * CFrame.new(0, -2.346, 0)
                     PositionSpoof.SpoofOffsetApplied = true
@@ -3516,19 +3573,12 @@ task.spawn(function()
         if Library.Unloaded or not PositionSpoof.Enabled then return end
         local char = LocalPlayer.Character
         if char and char:GetAttribute("Hiding") then return end
-        -- ФИКС ЛАГОВ ПРИСЕДАНИЯ: при включённом Position Spoof разблокируем физику
-        -- корневой части персонажа и убираем зависание в воздухе.
-        -- Причина бага: раньше скрипт каждый кадр двигал collision-объекты
-        -- и это конфликтовало с приседанием (персонаж висел в воздухе / лагал).
-        -- Теперь: если персонаж приседает, не мешаем физике приседания двигать его,
-        -- а просто держим collision на нужной высоте один раз за кадр.
         ApplyPositionSpoof()
     end))
 end)
 --============================================================
 -- RESPAWN
---============================================================
-TrackConnection(LocalPlayer.CharacterAdded:Connect(function(newCharacter)
+--============================================================TrackConnection(LocalPlayer.CharacterAdded:Connect(function(newCharacter)
     STATE.Character = newCharacter
     STATE.HumanoidRootPart = newCharacter:WaitForChild("HumanoidRootPart")
     STATE.Humanoid = newCharacter:WaitForChild("Humanoid")
@@ -3540,7 +3590,6 @@ TrackConnection(LocalPlayer.CharacterAdded:Connect(function(newCharacter)
     PositionSpoof.OldHipHeight = nil
     PositionSpoof.SpoofOffsetApplied = nil
     PositionSpoof.LastCrouchState = nil
-    -- сброс снапшота ThirdPerson головы (старый персонаж уничтожен, instance-ссылки недействительны)
     ThirdPersonSession = nil
     table.clear(ThirdPersonHidden)
     STATE.SpecificCache = {}
@@ -3630,7 +3679,6 @@ local ESP = {
     PetalColor=Color3.fromRGB(255,105,180),
     SpecificColor=Color3.fromRGB(180,100,255),
 }
--- Категории ESP: id тумблера -> категория (используется ESP и Tracers)
 local ESP_TOGGLE_CATEGORY = {
     ESP_Doors = "Door", ESP_Keys = "Key", ESP_Monsters = "Monster", ESP_Players = "Player",
     ESP_Items = "Item", ESP_Books = "Book", ESP_Breakers = "Breaker", ESP_Fuses = "Fuse",
@@ -3641,7 +3689,6 @@ local ESP_TOGGLE_CATEGORY = {
 local ESPRegistry = {}
 local Esp, RemoveEsp, HasEsp, scanExistingPlayers, clearAllEsp, RemoveEspCategory, RescanEsp
 task.spawn(function()
-    -- Category: "Door", "Key", "Monster", ... (нужно для Tracers и для быстрого выключения категории)
     Esp = function(Adornee, TextAdornee, Text, Color, OutlineColor, Category)
         if not Adornee or not Adornee.Parent then return end
         if Adornee:FindFirstChild("_LOLHAXHL") then return end
@@ -3677,7 +3724,6 @@ task.spawn(function()
             hl = Highlight, bg = BillboardGui,
         }
     end
-    -- Обновление текста дистанции ~10 раз в секунду (раньше — каждый кадр для каждого объекта)
     local lastEspUpdate = 0
     TrackConnection(RunService.Heartbeat:Connect(function()
         if Library.Unloaded or not ESP.Enabled then return end
@@ -3720,7 +3766,6 @@ task.spawn(function()
         end
     end
     HasEsp = function(parent) return parent and parent:FindFirstChild("_LOLHAXHL") ~= nil end
-    -- Убрать ESP всех объектов одной категории (при выключении тумблера категории)
     RemoveEspCategory = function(category)
         for adornee, data in pairs(ESPRegistry) do
             if data.category == category then
@@ -3744,7 +3789,6 @@ task.spawn(function()
         end
     end
     clearAllEsp = function()
-        -- сначала всё, что зарегистрировано (в т.ч. объекты глубоко внутри комнат)
         for adornee, data in pairs(ESPRegistry) do
             if data.hl then pcall(function() data.hl:Destroy() end) end
             if data.bg then pcall(function() data.bg:Destroy() end) end
@@ -3760,7 +3804,6 @@ task.spawn(function()
         end
     end
 end)
--- ESP handler для новых объектов
 task.spawn(function()
     local function HandleEspDescendant(v)
         if not ESP.Enabled or not v:IsA("Model") then return end
@@ -3824,7 +3867,6 @@ task.spawn(function()
             end)
             return
         end
-        -- Pizza теперь управляется своим тумблером "Esp Pizza" (раньше тумблер ничего не делал)
         if v.Name == "Pizza" and StaticDB.MiscPickups[v.Name] then
             if Toggles.ESP_Pizza and Toggles.ESP_Pizza.Value then
                 task.delay(0.5, function()
@@ -3894,19 +3936,16 @@ task.spawn(function()
             return
         end
     end
-    -- Новые объекты — через общий Watcher (очередь + бюджет на кадр, без task.delay на каждый объект)
     Watcher.Register("ESP", {
         IsEnabled = function() return ESP.Enabled and not Library.Unloaded end,
         Filter = function(v) return v:IsA("Model") end,
         Handle = HandleEspDescendant,
     })
-    -- Полный пересканирование: вызывается при включении ESP или любой его категории
     RescanEsp = function()
         if not ESP.Enabled then return end
         Watcher.Scan("ESP")
         if Toggles.ESP_Players and Toggles.ESP_Players.Value then scanExistingPlayers() end
     end
-    -- Игроки: и новые, и уже находящиеся на сервере (раньше после респавна старых игроков ESP пропадал)
     local function HookPlayer(plr)
         if plr == LocalPlayer then return end
         TrackConnection(plr.CharacterAdded:Connect(function(char)
@@ -3921,12 +3960,8 @@ task.spawn(function()
     TrackConnection(Players.PlayerAdded:Connect(HookPlayer))
 end)
 --============================================================
--- TRACERS  (линии от прицела к объектам из ESP)
+-- TRACERS
 --============================================================
--- Берут данные напрямую из ESPRegistry (то, что подсвечивает ESP), поэтому работают,
--- когда включён ESP и нужная категория ESP. Для каждой категории можно включить/выключить
--- трейсер и задать свой цвет. Рисуются через Drawing API (если экзекутор его поддерживает),
--- иначе — через обычные GUI-линии (Frame с поворотом).
 local Tracers = {
     Enabled = false,
     Origin = "Crosshair",
@@ -3935,10 +3970,10 @@ local Tracers = {
     MaxDistance = 1000,
     UseESPColor = false,
     ShowOffscreen = true,
-    Targets = {},       -- category -> true
-    Colors = {},        -- category -> Color3
-    Pool = {},          -- adornee -> line
-    Free = {},          -- свободные линии для повторного использования
+    Targets = {},
+    Colors = {},
+    Pool = {},
+    Free = {},
     Frame = 0,
     Gui = nil,
     UseDrawing = false,
@@ -3968,43 +4003,31 @@ for _, c in ipairs(TRACER_CATEGORIES) do
     Tracers.Targets[c.key] = true
 end
 --============================================================
--- ARROWS  (стрелки к Rush/предметам когда отвернулся)
+-- ARROWS
 --============================================================
--- Показывает стрелки по краям экрана к объектам из ESP:
---  * Rush/близкие монстры — красная стрелка "спасайся"
---  * Пропущенные предметы (когда ты отвернулся) — стрелка в сторону
--- Полностью гибкая настройка: вкл/выкл, что показывать, размер, расстояние.
 local Arrows = {
     Enabled = false,
-    ShowRush = true,          -- стрелки на Rush/Ambush/близких монстров
-    ShowMissedItems = true,   -- стрелки на предметы, которые ты пропустил
-    MaxDistance = 85,         -- макс. дистанция для Rush-стрелки
-    ItemDistance = 30,        -- макс. дистанция для предмета
-    ArrowSize = 24,           -- размер стрелки (px)
-    MaxArrows = 5,            -- максимум стрелок одновременно
+    ShowRush = true,
+    ShowMissedItems = true,
+    MaxDistance = 85,
+    ItemDistance = 30,
+    ArrowSize = 24,
+    MaxArrows = 5,
     RushColor = Color3.fromRGB(255, 60, 60),
     ItemColor = Color3.fromRGB(255, 215, 0),
-    EdgePadding = 60,         -- отступ от края экрана (px)
-    TickInterval = 0.1,       -- интервал пересборки кандидатов (сек, 10 раз/сек достаточно)
-    LastTick = 0,             -- timestamp последней пересборки
-    CachedCandidates = {},    -- кэш кандидатов между пересборками
+    EdgePadding = 60,
+    TickInterval = 0.1,
+    LastTick = 0,
+    CachedCandidates = {},
 }
 local ArrowRegistry = {}
 local BuildArrow, RemoveAllArrows
 local ArrowConn = nil
 local function GetArrowAngle(worldPos, cam)
-    -- угол между направлением камеры и объектом
-    -- ФИКС СТРЕЛКА СЗАДИ: rel.Z > 0 означает объект ЗА КАМЕРОЙ.
-    -- Для объекта сзади корректно вычисляем угол как atan2(X, -Z),
-    -- но с rel.Z > 0 мы получаем -Z отрицательный, что даёт угол с |deg| > 90,
-    -- что корректно поворачивает шеврон в сторону объекта (включая назад).
-    -- Пример: объект прямо сзади → X=0, Z=+1 → atan2(0, -1) = 180° → шеврон вниз.
-    -- Пример: объект сзади-слева → X<0, Z>0 → угол ~ -135° → шеврон влево-вниз.
     local cf = cam.CFrame
     local rel = cf:PointToObjectSpace(worldPos)
     return math.atan2(rel.X, -rel.Z)
 end
--- Возвра щает true если объект на экране (в Frustrum камеры и не за спиной)
 local function IsOnScreen(worldPos, cam)
     local sp, onScreen = cam:WorldToViewportPoint(worldPos)
     return onScreen and sp.Z > 0
@@ -4020,17 +4043,11 @@ local function ArrowsTick()
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
-
-    -- THROTTLE: пересобираем кандидатов не чаще TickInterval (антилаг).
-    -- Сама отрисовка стрелок всё равно каждый кадр (позиции обновляются быстро),
-    -- но сортировка/поиск объектов — только 10 раз/сек.
     local now = tick()
     if now - Arrows.LastTick < Arrows.TickInterval then
-        -- используем кэш
         local candidates = Arrows.CachedCandidates
         if candidates then
             local shown = math.min(#candidates, Arrows.MaxArrows)
-            -- Пул стрелок
             local currentCount = 0
             for _, arrow in pairs(ArrowRegistry) do
                 if arrow and arrow.Parent then currentCount += 1 end
@@ -4048,20 +4065,14 @@ local function ArrowsTick()
             end
             for i = 1, shown do
                 local c = candidates[i]
-                -- получаем ТЕКУЩУЮ позицию и дистанцию каждый кадр (по ссылке)
                 local pos = (c.ref and c.ref.Parent and ((c.ref:IsA("BasePart") and c.ref.Position)
                     or (c.ref:IsA("Model") and c.ref.PrimaryPart and c.ref.PrimaryPart.Position))) or nil
                 if pos then
                     local dist = LocalPlayer:DistanceFromCharacter(pos)
-                    -- ФИКС: предмет подобран → дистанция ~0 или parent nil → стрелка ПРОПАДАЕТ
-                    -- (раньше `not onScreen` вызывало "стрелка исчезает" — но для подобранного
-                    -- предмета ESPRegistry обновляется и объект удаляется, поэтому стрелка
-                    -- просто не рисуется если позиция nil)
                     local shouldRender = false
                     if c.isRush then
                         shouldRender = (dist <= Arrows.MaxDistance and c.ref:GetAttribute("Inactive") ~= true)
                     else
-                        -- предмет считается "пропущенным" если он ЗА ЭКРАНОМ (не onScreen)
                         local _, onScreen = cam:WorldToScreenPoint(pos)
                         shouldRender = (dist <= Arrows.ItemDistance and not onScreen)
                     end
@@ -4076,9 +4087,6 @@ local function ArrowsTick()
         return
     end
     Arrows.LastTick = now
-
-    -- Собираем кандидатов — Rush ВСЕГДА приоритетнее предметов
-    -- Allowlist предметов: только реальные подбираемые предметы (НЕ HideBox — это укрытие)
     local ALLOWED_ITEM_CATEGORIES = {
         ["Item"] = true, ["Key"] = true, ["Book"] = true, ["Gold"] = true, ["Petal"] = true,
         ["Pizza"] = true, ["Fuse"] = true, ["Breaker"] = true,
@@ -4088,7 +4096,6 @@ local function ArrowsTick()
     if Arrows.ShowRush then
         for _, Entity in ipairs(Workspace:GetChildren()) do
             if Entity and StaticDB.EntityDistances[Entity.Name] and Entity.PrimaryPart then
-                -- храним ССЫЛКУ на Entity, а не снимок позиции (чтобы обновлялась каждый кадр)
                 table.insert(rushCandidates, {
                     ref = Entity,
                     color = Arrows.RushColor,
@@ -4103,7 +4110,6 @@ local function ArrowsTick()
             if adornee and adornee.Parent then
                 local cat = data.category
                 if cat and ALLOWED_ITEM_CATEGORIES[cat] then
-                    -- храним ССЫЛКУ на adornee (BasePart/Model), позиция обновляется каждый кадр
                     table.insert(itemCandidates, {
                         ref = adornee,
                         color = Arrows.ItemColor,
@@ -4114,9 +4120,6 @@ local function ArrowsTick()
             end
         end
     end
-
-    -- Rush приоритет: сначала все Rush (сортировка по дистанции), затем предметы
-    -- ВАЖНО: сортируем по ТЕКУЩЕЙ дистанции (не снимку) — чтобы приоритет обновлялся
     table.sort(rushCandidates, function(a, b)
         local ap = a.ref.PrimaryPart and a.ref.PrimaryPart.Position or Vector3.zero
         local bp = b.ref.PrimaryPart and b.ref.PrimaryPart.Position or Vector3.zero
@@ -4134,18 +4137,13 @@ local function ArrowsTick()
     local candidates = {}
     for _, c in ipairs(rushCandidates) do table.insert(candidates, c) end
     for _, c in ipairs(itemCandidates) do table.insert(candidates, c) end
-    -- сохраняем в кэш для следующего кадра
     Arrows.CachedCandidates = candidates
     local shown = math.min(#candidates, Arrows.MaxArrows)
-
-    -- ПУЛ СТРЕЛОК: создаём/убираем только разницу, не пересоздаём каждый кадр (антилаг)
-    -- Скрываем лишние стрелки, которые больше не нужны
     local currentCount = 0
     for _, arrow in pairs(ArrowRegistry) do
         if arrow and arrow.Parent then currentCount += 1 end
     end
     while currentCount > shown do
-        -- удаляем самую последнюю
         local maxIdx = 0
         for idx in pairs(ArrowRegistry) do
             if idx > maxIdx then maxIdx = idx end
@@ -4156,15 +4154,12 @@ local function ArrowsTick()
         end
         currentCount -= 1
     end
-    -- Создаём/обновляем только нужное количество стрелок
     for i = 1, shown do
         local c = candidates[i]
-        -- получаем ТЕКУЩУЮ позицию и дистанцию каждый кадр (по ссылке)
         local pos = (c.ref and c.ref.Parent and ((c.ref:IsA("BasePart") and c.ref.Position)
             or (c.ref:IsA("Model") and c.ref.PrimaryPart and c.ref.PrimaryPart.Position))) or nil
         if pos then
             local dist = LocalPlayer:DistanceFromCharacter(pos)
-            -- rush: проверяем дистанцию каждый кадр
             if c.isRush then
                 if dist <= Arrows.MaxDistance and c.ref:GetAttribute("Inactive") ~= true then
                     local angle = GetArrowAngle(pos, cam)
@@ -4172,9 +4167,6 @@ local function ArrowsTick()
                     BuildArrow(i, deg, c.color, dist, c.isRush, c.name)
                 end
             else
-                -- ФИКС: предмет подобран → стрелка пропадает (ESPRegistry удалит adornee
-                -- при подборе, позиция станет nil → `if pos then` уже не рисует стрелку).
-                -- Для подобранного предмета дистанция ~0 (в руке) → тоже не рисуем.
                 if dist <= Arrows.ItemDistance and dist > 3 then
                     local _, onScreen = cam:WorldToScreenPoint(pos)
                     if not onScreen then
@@ -4187,7 +4179,6 @@ local function ArrowsTick()
         end
     end
 end
--- Функции создания/удаления стрелок — инициализируются ниже (нужен доступ к GUI)
 local ArrowGui = nil
 local function GetArrowGui()
     if ArrowGui then return ArrowGui end
@@ -4203,10 +4194,6 @@ local function GetArrowGui()
     return gui
 end
 BuildArrow = function(index, deg, color, dist, isRush, name)
-    -- ФИКС СТРЕЛКА СЗАДИ: для объекта за спиной (deg > 90 или deg < -90)
-    -- шеврон должен указывать В СТОРОНУ объекта, в том числе "назад" по экрану.
-    -- Позиция контейнера остаётся на окружности, glyph.Rotation = deg —
-    -- шеврон поворачивается в сторону объекта, включая объекты за спиной.
     local gui = GetArrowGui()
     local arrow = gui:FindFirstChild("Arrow" .. index)
     if not arrow then
@@ -4217,8 +4204,6 @@ BuildArrow = function(index, deg, color, dist, isRush, name)
         arrow.BackgroundTransparency = 1
         arrow.BorderSizePixel = 0
         arrow.Parent = gui
-        -- ГЛИФ (контейнер шеврона): вращается вместе со стрелкой,
-        -- но НЕ содержит label (текст всегда горизонтален)
         local glyph = Instance.new("Frame")
         glyph.Name = "Glyph"
         glyph.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -4227,7 +4212,6 @@ BuildArrow = function(index, deg, color, dist, isRush, name)
         glyph.BackgroundTransparency = 1
         glyph.BorderSizePixel = 0
         glyph.Parent = arrow
-        -- шеврон из двух повернутых линий
         local wing1 = Instance.new("Frame")
         wing1.Name = "Wing1"
         wing1.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -4264,7 +4248,6 @@ BuildArrow = function(index, deg, color, dist, isRush, name)
         label.Parent = arrow
         ArrowRegistry[index] = arrow
     end
-    -- Обновляем позицию контейнера (стрелка указывает в сторону объекта)
     local cam = Workspace.CurrentCamera
     local vs = cam.ViewportSize
     local cx, cy = vs.X / 2, vs.Y / 2
@@ -4274,14 +4257,8 @@ BuildArrow = function(index, deg, color, dist, isRush, name)
     local y = cy - math.cos(rad) * radius
     arrow.Position = UDim2.new(0, x, 0, y)
     arrow.Size = UDim2.fromOffset(Arrows.ArrowSize, Arrows.ArrowSize)
-    -- вращаем ГЛИФ (шеврон), а label остаётся горизонтальным
-    -- deg напрямую задаёт направление шеврона: 0 = вверх, 90 = вправо,
-    -- 180 = вниз (объект прямо сзади), -90 = влево.
-    -- Для объекта ЗА СПИНОЙ (deg > 90 / < -90) шеврон поворачивается
-    -- в сторону объекта, включая направление "назад" по экрану.
     local glyph = arrow:FindFirstChild("Glyph")
     if glyph then glyph.Rotation = deg end
-    -- обновляем позиции крыльев (AR_Size)
     for _, wingName in ipairs({"Wing1", "Wing2"}) do
         local wing = glyph and glyph:FindFirstChild(wingName)
         if wing then
@@ -4293,7 +4270,6 @@ BuildArrow = function(index, deg, color, dist, isRush, name)
             end
         end
     end
-    -- цвет и текст (теперь с именем объекта) + обновляем размеры крыльев (AR_Size)
     if glyph then
         for _, wingName in ipairs({"Wing1", "Wing2"}) do
             local wing = glyph:FindFirstChild(wingName)
@@ -4320,16 +4296,13 @@ local StartArrows, StopArrows
 StartArrows = function()
     if ArrowConn then return end
     GetArrowGui()
-    -- BindToRenderStep с приоритетом AFTER Camera, чтобы не было дерганья UI
-    -- при быстром повороте камеры (RenderStepped отстаёт от камеры).
     pcall(function()
         RunService:BindToRenderStep("_LOLHAX_ArrowsTick", Enum.RenderPriority.Camera.Value + 1, function()
             pcall(ArrowsTick)
         end)
-        ArrowConn = true -- флаг, что рендер-степ подключён
+        ArrowConn = true
     end)
     if not ArrowConn then
-        -- fallback: обычный RenderStepped (если BindToRenderStep недоступен)
         ArrowConn = RunService.RenderStepped:Connect(function()
             pcall(ArrowsTick)
         end)
@@ -4354,21 +4327,21 @@ StopArrows = function()
     end
 end
 --============================================================
--- CROSSHAIR  (рендер: 5 стилей как в CS2 + обычный перекрестие)
+-- CROSSHAIR
 --============================================================
 local Crosshair = {
     Enabled = false,
-    Style = "Default",     -- Default | Square | Circle | HVH | Quadrant
+    Style = "Default",
     Color = Color3.fromRGB(170, 110, 255),
     Rainbow = false,
-    Size = 10,             -- длина линий / радиус
+    Size = 10,
     Thickness = 2,
     Gap = 4,
     DotSize = 0,
     Transparency = 0,
     Outline = 1,
     OutlineColor = Color3.fromRGB(0, 0, 0),
-    CircleRadius = 15,      -- отдельный радиус для Circle (не конфликтует с Size)
+    CircleRadius = 15,
 }
 local CrosshairGui, CrosshairRoot, CrosshairParts = nil, nil, {}
 local RainbowHue = 0
@@ -4393,8 +4366,6 @@ local function GetCrosshairGui()
     gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     local okp = pcall(function() gui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
     if not okp or not gui.Parent then gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
-    -- КОРНЕВОЙ ФРЕЙМ по центру экрана: позиции всех частей задаются как ЛОКАЛЬНЫЕ
-    -- оффсеты от центра, поэтому автоматически реагируют на изменение размера вьюпорта.
     local root = Instance.new("Frame")
     root.Name = "Root"
     root.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -4428,7 +4399,6 @@ local function NewStroke(p, thickness)
 end
 local function UpdateCrosshairColor(dt)
     if Crosshair.Rainbow then
-        -- rainbow: плавный перелив, скорость НЕ зависит от FPS (используем dt)
         RainbowHue = (RainbowHue + (dt or 1/60) * 0.3) % 1
         Crosshair.RainbowColor = Color3.fromHSV(RainbowHue, 1, 1)
     end
@@ -4438,7 +4408,6 @@ local function RenderCrosshair(dt)
         if #CrosshairParts > 0 then RemoveCrosshair() end
         return
     end
-    -- скрываем стандартный прицел Doors КАЖДЫЙ КАДР (он может появиться позже)
     pcall(HideDefaultCrosshair)
     local cam = Workspace.CurrentCamera
     if not cam then return end
@@ -4446,8 +4415,6 @@ local function RenderCrosshair(dt)
     local cx, cy = vs.X / 2, vs.Y / 2
     UpdateCrosshairColor(dt)
     local color = Crosshair.Rainbow and (Crosshair.RainbowColor or Crosshair.Color) or Crosshair.Color
-    -- BuildKey теперь включает ВСЕ геометрические параметры (Gap, Size, Thickness, DotSize, Outline, Style)
-    -- КРИТИЧЕСКИЙ ФИКС: раньше Gap не было в ключе, поэтому изменение Gap не обновляло геометрию.
     local buildKey = string.format("%s|%d|%d|%d|%d|%d|%d",
         Crosshair.Style, Crosshair.DotSize, Crosshair.Outline,
         Crosshair.Size, Crosshair.Thickness, Crosshair.Gap,
@@ -4460,11 +4427,7 @@ local function RenderCrosshair(dt)
     local T = Crosshair.Thickness
     local G = Crosshair.Gap
     local style = Crosshair.Style
-    -- создаем части один раз (только если ещё не созданы)
     if #CrosshairParts == 0 then
-    -- Позиции задаются как ЛОКАЛЬНЫЕ оффсеты от центра экрана (Root).
-    -- cx/cy больше не используются — всё автоматически центрируется при изменении вьюпорта.
-    -- Common center dot (для всех стилей, не только Circle/HVH)
     local dotPart = nil
     if Crosshair.DotSize > 0 then
         dotPart = NewPart("Dot")
@@ -4474,14 +4437,12 @@ local function RenderCrosshair(dt)
         if Crosshair.Outline > 0 then NewStroke(dotPart) end
     end
     if style == "Default" then
-        -- 4 линии вверх/вниз/влево/вправо с зазором (локальные оффсеты)
         local up = NewPart("Up"); up.Position = UDim2.fromOffset(0, -(G + S/2)); up.Size = UDim2.fromOffset(T, S)
         local down = NewPart("Down"); down.Position = UDim2.fromOffset(0, G + S/2); down.Size = UDim2.fromOffset(T, S)
         local left = NewPart("Left"); left.Position = UDim2.fromOffset(-(G + S/2), 0); left.Size = UDim2.fromOffset(S, T)
         local right = NewPart("Right"); right.Position = UDim2.fromOffset(G + S/2, 0); right.Size = UDim2.fromOffset(S, T)
         if Crosshair.Outline > 0 then NewStroke(up); NewStroke(down); NewStroke(left); NewStroke(right) end
     elseif style == "Square" then
-        -- квадрат: 4 линии образуют квадрат с зазором внутри
         local w = S * 2 + G * 2
         local h = S * 2 + G * 2
         local top = NewPart("Top"); top.Position = UDim2.fromOffset(0, -(G + S)); top.Size = UDim2.fromOffset(w, T)
@@ -4490,11 +4451,8 @@ local function RenderCrosshair(dt)
         local rightS = NewPart("RightS"); rightS.Position = UDim2.fromOffset(G + S, 0); rightS.Size = UDim2.fromOffset(T, h)
         if Crosshair.Outline > 0 then NewStroke(top); NewStroke(bottom); NewStroke(leftS); NewStroke(rightS) end
     elseif style == "Circle" then
-        -- круг: ДВА СЛОЯ. Outline — нижний (шире), цветной ring — верхний.
-        -- Это даёт корректный контур, а не два stroke на одном контуре.
         local R = Crosshair.CircleRadius
         if Crosshair.Outline > 0 then
-            -- нижний слой: outline (шире на 2*Outline, рисуется OutlineColor)
             local o = NewPart("CircleOutline")
             o.Position = UDim2.fromOffset(0, 0)
             o.Size = UDim2.fromOffset(R * 2, R * 2)
@@ -4510,7 +4468,6 @@ local function RenderCrosshair(dt)
             oStroke.Transparency = Crosshair.Transparency
             oStroke.Parent = o
         end
-        -- верхний слой: цветной ring
         local c = NewPart("Circle")
         c.Position = UDim2.fromOffset(0, 0)
         c.Size = UDim2.fromOffset(R * 2, R * 2)
@@ -4526,23 +4483,17 @@ local function RenderCrosshair(dt)
         stroke.Transparency = Crosshair.Transparency
         stroke.Parent = c
     elseif style == "HVH" then
-        -- HVH: крест без зазора в центре
         local hLine = NewPart("H"); hLine.Position = UDim2.fromOffset(0, 0); hLine.Size = UDim2.fromOffset(S * 2, T)
         local vLine = NewPart("V"); vLine.Position = UDim2.fromOffset(0, 0); vLine.Size = UDim2.fromOffset(T, S * 2)
         if Crosshair.Outline > 0 then NewStroke(hLine); NewStroke(vLine) end
     elseif style == "Quadrant" then
-        -- Quadrant: 4 угла (скобки)
         local q = S / 2
-        -- верх-лево
         local tlH = NewPart("TL_H"); tlH.Position = UDim2.fromOffset(-(G + q/2), -(G + q)); tlH.Size = UDim2.fromOffset(q, T)
         local tlV = NewPart("TL_V"); tlV.Position = UDim2.fromOffset(-(G + q), -(G + q/2)); tlV.Size = UDim2.fromOffset(T, q)
-        -- верх-право
         local trH = NewPart("TR_H"); trH.Position = UDim2.fromOffset(G + q/2, -(G + q)); trH.Size = UDim2.fromOffset(q, T)
         local trV = NewPart("TR_V"); trV.Position = UDim2.fromOffset(G + q, -(G + q/2)); trV.Size = UDim2.fromOffset(T, q)
-        -- низ-лево
         local blH = NewPart("BL_H"); blH.Position = UDim2.fromOffset(-(G + q/2), G + q); blH.Size = UDim2.fromOffset(q, T)
         local blV = NewPart("BL_V"); blV.Position = UDim2.fromOffset(-(G + q), G + q/2); blV.Size = UDim2.fromOffset(T, q)
-        -- низ-право
         local brH = NewPart("BR_H"); brH.Position = UDim2.fromOffset(G + q/2, G + q); brH.Size = UDim2.fromOffset(q, T)
         local brV = NewPart("BR_V"); brV.Position = UDim2.fromOffset(G + q, G + q/2); brV.Size = UDim2.fromOffset(T, q)
         if Crosshair.Outline > 0 then
@@ -4550,26 +4501,21 @@ local function RenderCrosshair(dt)
         end
     end
     end
-    -- применяем цвет ко всем частям — ОТДЕЛЬНО outline (не перекрашиваем OutlineColor)
     for _, p in ipairs(CrosshairParts) do
         if p and p.Parent then
             if p.Name == "Circle" then
-                -- Circle: цветной ring (stroke в цвет прицела)
                 local stroke = p:FindFirstChild("CircleStroke")
                 if stroke then stroke.Color = color end
             elseif p.Name == "CircleOutline" then
-                -- CircleOutline: рисуется OutlineColor (не перекрашивается)
                 local oStroke = p:FindFirstChild("CircleOutlineStroke")
                 if oStroke then oStroke.Color = Crosshair.OutlineColor end
             else
-                -- остальные: только заливка (outline остаётся OutlineColor)
                 if p:IsA("Frame") then p.BackgroundColor3 = color end
                 local stroke = p:FindFirstChild("UIStroke")
                 if stroke then stroke.Color = Crosshair.OutlineColor end
             end
         end
     end
-    -- обновляем прозрачность динамически (не только при создании) — ЕДИНООБРАЗНО
     for _, p in ipairs(CrosshairParts) do
         if p and p.Parent and p:IsA("Frame") then
             local stroke = p:FindFirstChild("UIStroke")
@@ -4584,18 +4530,8 @@ local function RenderCrosshair(dt)
         end
     end
 end
--- рендерим прицел только при изменении опций (не каждый кадр, чтобы не лагало)
 local CrosshairRenderConn = nil
---========================================
--- СКРЫТИЕ СТАНДАРТНОГО ПРИЦЕЛА DOORS (если он есть в PlayerGui)
---========================================
--- Doors рисует прицел через обычный ImageLabel/GUI в PlayerGui. Когда включён наш Crosshair,
--- мы скрываем ВСЕ его элементы (ImageLabel с центрированным размером, Name ~= наши).
--- Не трогаем остальные GUI игрока, только прицелы.
 local HiddenDefaultCrosshairs = {}
--- ФИКС СТАНДАРТНОГО ПРИЦЕЛА DOORS: прицел лежит по пути
--- Players.(Игрок).PlayerGui.MainUI.MainFrame.Crosshair (или похожем).
--- Ищем именно в MainUI.MainFrame и скрываем ВСЁ дерево Crosshair.
 local function HideDefaultCrosshair()
     local pg = LocalPlayer:FindFirstChild("PlayerGui")
     if not pg then return end
@@ -4609,7 +4545,6 @@ local function HideDefaultCrosshair()
             HiddenDefaultCrosshairs[crosshair] = true
         end
         crosshair.Visible = false
-        -- дополнительно: все дочерние ImageLabel внутри Crosshair тоже скрыть
         for _, child in ipairs(crosshair:GetDescendants()) do
             if child:IsA("ImageLabel") then
                 if HiddenDefaultCrosshairs[child] == nil then
@@ -4619,7 +4554,6 @@ local function HideDefaultCrosshair()
             end
         end
     end
-    -- fallback: если не нашли по точному пути, ищем все ImageLabel с центрированной позицией
     local function scan(instance, seen)
         seen = seen or {}
         if seen[instance] then return end
@@ -4663,18 +4597,14 @@ local function RestoreDefaultCrosshair()
 end
 local function StartCrosshair()
     if CrosshairRenderConn then return end
-    -- СКРЫВАЕМ стандартный прицел Doors (как только включается наш Crosshair)
     pcall(HideDefaultCrosshair)
-    -- BindToRenderStep с приоритетом AFTER Camera, чтобы не было дерганья UI
-    -- при быстром повороте камеры (RenderStepped отстаёт от камеры).
     pcall(function()
         RunService:BindToRenderStep("_LOLHAX_CrosshairRender", Enum.RenderPriority.Camera.Value + 1, function(dt)
             pcall(RenderCrosshair, dt)
         end)
-        CrosshairRenderConn = true -- флаг, что рендер-степ подключён
+        CrosshairRenderConn = true
     end)
     if not CrosshairRenderConn then
-        -- fallback: обычный RenderStepped
         CrosshairRenderConn = RunService.RenderStepped:Connect(function(dt)
             pcall(RenderCrosshair, dt)
         end)
@@ -4693,11 +4623,9 @@ local function StopCrosshair()
         CrosshairRenderConn = nil
     end
     RemoveCrosshair()
-    -- ВОССТАНАВЛИВАЕМ стандартный прицел Doors (выключили наш Crosshair)
     pcall(RestoreDefaultCrosshair)
 end
 task.spawn(function()
-    -- Проверяем, есть ли Drawing API
     pcall(function()
         if Drawing and Drawing.new then
             local test = Drawing.new("Line")
@@ -4711,7 +4639,7 @@ task.spawn(function()
         if Tracers.Gui and Tracers.Gui.Parent then return Tracers.Gui end
         local gui = Instance.new("ScreenGui")
         gui.Name = "_LOLHAX_Tracers"
-        gui.IgnoreGuiInset = true          -- координаты совпадают с WorldToViewportPoint
+        gui.IgnoreGuiInset = true
         gui.ResetOnSpawn = false
         gui.DisplayOrder = 5
         gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -4757,7 +4685,7 @@ task.spawn(function()
             d.To = to
             d.Color = color
             d.Thickness = thickness
-            d.Transparency = 1 - transp   -- в Drawing API Transparency = непрозрачность
+            d.Transparency = 1 - transp
             if not line.visible then d.Visible = true end
         elseif line.f then
             local f = line.f
@@ -4796,7 +4724,6 @@ task.spawn(function()
         Tracers.Free = {}
         if Tracers.Gui then pcall(function() Tracers.Gui:Destroy() end) Tracers.Gui = nil end
     end
-    -- Точка цели в мире для записи ESP
     local function GetTargetPosition(adornee, data)
         local cat = data.category
         if cat == "Player" and adornee:IsA("Model") then
@@ -4828,9 +4755,8 @@ task.spawn(function()
         elseif mode == "Top" then return Vector2.new(vs.X / 2, 2)
         elseif mode == "Mouse" then return UserInputService:GetMouseLocation()
         end
-        return Vector2.new(vs.X / 2, vs.Y / 2) -- Crosshair (центр экрана = прицел)
+        return Vector2.new(vs.X / 2, vs.Y / 2)
     end
-    -- Если объект за спиной — рисуем линию к краю экрана в его сторону
     local function ProjectOffscreen(origin, sp, vs)
         local dir = Vector2.new(sp.X, sp.Y) - origin
         if sp.Z < 0 then dir = -dir end
@@ -4900,7 +4826,6 @@ task.spawn(function()
         Tracers.Enabled = true
         if Tracers.Bound then return end
         Tracers.Bound = true
-        -- сразу после обновления камеры, чтобы линии не "отставали" от поворота
         local ok = pcall(function()
             RunService:BindToRenderStep("LOLHAX_Tracers", Enum.RenderPriority.Camera.Value + 1, function()
                 local s, err = pcall(Step)
@@ -4921,12 +4846,8 @@ task.spawn(function()
     end
 end)
 --============================================================
--- DOOR REACH  (открытие дверей на расстоянии)
+-- DOOR REACH
 --============================================================
--- Логика как у Abysall: пока дверь не открылась (звук Door.Open не проигрался),
--- и игрок ближе Distance — шлём ClientOpen:FireServer() не чаще 1 раза в 0.1 сек.
--- Вместо отдельного Heartbeat на каждую дверь — один общий цикл ~10 раз в секунду
--- по дверям загруженных комнат (их всего несколько), поэтому нагрузки почти нет.
 local DoorReach = {
     Enabled = false,
     Distance = 75,
@@ -4972,7 +4893,7 @@ task.spawn(function()
     end))
 end)
 --============================================================
--- MISC FUNCTIONS  (кнопки: GLITCH / LOBBY / PLAY AGAIN / KILL)
+-- MISC FUNCTIONS
 --============================================================
 local MiscFuncs = {}
 do
@@ -4984,8 +4905,8 @@ do
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if hrp then pcall(function() hrp.Anchored = value end) end
     end
-    -- KILL
-    MiscFuncs.Kill = function()
+    -- DELAYED KILL (как было: replicatesignal -> Underwater -> Health = 0)
+    MiscFuncs.DelayedKill = function()
         STATE.SelfKilled = true
         local done = false
         if type(replicatesignal) == "function" then
@@ -4994,13 +4915,25 @@ do
         if not done then
             local rf = GetRemotes()
             if rf and rf:FindFirstChild("Underwater") then
-                rf.Underwater:FireServer(true)
+                pcall(function() rf.Underwater:FireServer(true) end)
             else
                 local char = LocalPlayer.Character
                 local hum = char and char:FindFirstChildOfClass("Humanoid")
                 if hum then hum.Health = 0 end
             end
         end
+    end
+    -- INSTANT KILL (через смену RigType на R6)
+    MiscFuncs.InstantKill = function()
+        STATE.SelfKilled = true
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum then return end
+        pcall(function()
+            hum.RigType = Enum.HumanoidRigType.R6
+        end)
+        pcall(function() hum.Health = 0 end)
     end
     -- PLAY AGAIN
     MiscFuncs.PlayAgain = function()
@@ -5022,8 +4955,7 @@ do
         end
         SafeCall(function() remote:FireServer() end)
     end
-    -- GLITCH: телепорт на 100 studs назад от направления взгляда, затем каждые 0.2 c
-    -- HumanoidRootPart.Anchored = true, через 0.2 c = false (повтор, пока не нажать снова)
+    -- GLITCH
     MiscFuncs.StopGlitch = function()
         if not STATE.GlitchActive then return end
         STATE.GlitchActive = false
@@ -5038,7 +4970,6 @@ do
             Notify("Glitch", "Character not found.", 3, true)
             return
         end
-        -- "назад от прицела": против направления камеры, по горизонтали (чтобы не улететь вверх/под землю)
         local look = cam.CFrame.LookVector
         local flat = Vector3.new(look.X, 0, look.Z)
         if flat.Magnitude < 0.01 then
@@ -5048,7 +4979,6 @@ do
         hrp.CFrame = hrp.CFrame - flat.Unit * 100
         STATE.GlitchActive = true
         SetAnchored(true)
-        -- смещение за один телепорт: 100 studs назад от прицела и 1000 studs вниз
         local offset = flat.Unit * 100000 + Vector3.new(0, 1000000, 0)
         task.spawn(function()
             while STATE.GlitchActive and not Library.Unloaded do
@@ -5074,6 +5004,232 @@ do
     end
 end
 --============================================================
+-- SKATE EFFECT ENGINE (2 режима: Jump Spam / Leg Angle)
+--============================================================
+local SkateState = {
+    Enabled = false,
+    Mode = "Jump",
+    SpeedBoost = 25,
+    SpamRate = 0.08,
+    LegAngle = 45,
+    LegSwingSpeed = 8,
+    LegMode = "Static",
+    OnlyWhenMoving = true,
+    AddVisuals = true,
+    Connection = nil,
+    LastSpam = 0,
+    OldJumpPower = nil,
+    OldWalkSpeed = nil,
+    OldCanJump = nil,
+    Sound = nil,
+    Emitter = nil,
+    LegMotors = {},
+    SwingPhase = 0,
+}
+local function SkateIsMoving()
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hum then return false end
+    return hum.MoveDirection.Magnitude > 0.1
+end
+local function SkateAddVisuals()
+    if not SkateState.AddVisuals then return end
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    if not SkateState.Sound or not SkateState.Sound.Parent then
+        SkateState.Sound = Instance.new("Sound")
+        SkateState.Sound.SoundId = "rbxassetid://9114221329"
+        SkateState.Sound.Looped = true
+        SkateState.Sound.Volume = 0.5
+        SkateState.Sound.Parent = hrp
+        SkateState.Sound:Play()
+    end
+    if not SkateState.Emitter or not SkateState.Emitter.Parent then
+        SkateState.Emitter = Instance.new("ParticleEmitter")
+        SkateState.Emitter.Texture = "rbxassetid://243098098"
+        SkateState.Emitter.Rate = 25
+        SkateState.Emitter.Lifetime = NumberRange.new(0.3, 0.6)
+        SkateState.Emitter.Speed = NumberRange.new(2, 5)
+        SkateState.Emitter.SpreadAngle = Vector2.new(45, 45)
+        SkateState.Emitter.Size = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.5),
+            NumberSequenceKeypoint.new(1, 0),
+        })
+        SkateState.Emitter.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0),
+            NumberSequenceKeypoint.new(1, 1),
+        })
+        SkateState.Emitter.Color = ColorSequence.new(Color3.fromRGB(255, 200, 100))
+        SkateState.Emitter.Parent = hrp
+    end
+end
+local function SkateRemoveVisuals()
+    if SkateState.Sound then
+        pcall(function() SkateState.Sound:Destroy() end)
+        SkateState.Sound = nil
+    end
+    if SkateState.Emitter then
+        pcall(function() SkateState.Emitter:Destroy() end)
+        SkateState.Emitter = nil
+    end
+end
+local function SkateCollectLegMotors()
+    SkateState.LegMotors = {}
+    local char = LocalPlayer.Character
+    if not char then return end
+    local legPartNames = {
+        ["Left Leg"] = true, ["Right Leg"] = true,
+        ["LeftUpperLeg"] = true, ["RightUpperLeg"] = true,
+    }
+    for _, obj in ipairs(char:GetDescendants()) do
+        if obj:IsA("Motor6D") then
+            local p1 = obj.Part1
+            if p1 and legPartNames[p1.Name] then
+                table.insert(SkateState.LegMotors, {
+                    motor = obj,
+                    origC0 = obj.C0,
+                    part1Name = p1.Name,
+                })
+            end
+        end
+    end
+    print("[SKATE] Found " .. #SkateState.LegMotors .. " leg motors")
+end
+local function SkateRestoreLegMotors()
+    for _, entry in ipairs(SkateState.LegMotors) do
+        if entry.motor and entry.motor.Parent then
+            pcall(function() entry.motor.C0 = entry.origC0 end)
+        end
+    end
+    SkateState.LegMotors = {}
+end
+local function SkateJumpLoop()
+    if not SkateState.Enabled or SkateState.Mode ~= "Jump" then return end
+    local char = LocalPlayer.Character
+    if not char or not char.Parent then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return end
+    if SkateState.OnlyWhenMoving and not SkateIsMoving() then return end
+    local now = tick()
+    if now - SkateState.LastSpam < SkateState.SpamRate then return end
+    SkateState.LastSpam = now
+    pcall(function()
+        hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    end)
+    if SkateState.OldCanJump ~= nil then
+        if char:GetAttribute("CanJump") ~= true then
+            char:SetAttribute("CanJump", true)
+        end
+    end
+    if hum.JumpPower ~= 0 then
+        hum.JumpPower = 0
+    end
+end
+local function SkateLegLoop(dt)
+    if not SkateState.Enabled or SkateState.Mode ~= "LegAngle" then return end
+    local char = LocalPlayer.Character
+    if not char or not char.Parent then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return end
+    if SkateState.OnlyWhenMoving and not SkateIsMoving() then return end
+    if SkateState.LegMode == "Swing" then
+        SkateState.SwingPhase = SkateState.SwingPhase + dt * SkateState.LegSwingSpeed
+    end
+    for i, entry in ipairs(SkateState.LegMotors) do
+        local motor = entry.motor
+        if motor and motor.Parent then
+            local angle
+            if SkateState.LegMode == "Swing" then
+                local phase = SkateState.SwingPhase + (i - 1) * math.pi
+                angle = -math.rad(SkateState.LegAngle) * math.sin(phase)
+            else
+                angle = -math.rad(SkateState.LegAngle)
+            end
+            local twist = math.rad(i == 1 and 15 or -15)
+            local offset = CFrame.new(0, 0, 0)
+                * CFrame.Angles(angle, 0, 0)
+                * CFrame.Angles(0, twist, 0)
+            motor.C0 = entry.origC0 * offset
+        end
+    end
+end
+local function SkateEnable()
+    if SkateState.Enabled then return end
+    SkateState.Enabled = true
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    SkateState.OldJumpPower = hum.JumpPower
+    SkateState.OldWalkSpeed = hum.WalkSpeed
+    SkateState.OldCanJump = char:GetAttribute("CanJump")
+    if SkateState.Mode == "Jump" then
+        hum.UseJumpPower = true
+        hum.JumpPower = 0
+        if SkateState.OldCanJump ~= nil then
+            char:SetAttribute("CanJump", true)
+        end
+    elseif SkateState.Mode == "LegAngle" then
+        SkateCollectLegMotors()
+    end
+    hum.WalkSpeed = SkateState.OldWalkSpeed + SkateState.SpeedBoost
+    SkateAddVisuals()
+    SkateState.Connection = RunService.RenderStepped:Connect(function(dt)
+        if SkateState.Mode == "Jump" then
+            SkateJumpLoop()
+        elseif SkateState.Mode == "LegAngle" then
+            SkateLegLoop(dt)
+        end
+    end)
+    print("[SKATE] Effect: ON (Mode: " .. SkateState.Mode .. ")")
+end
+local function SkateDisable()
+    if not SkateState.Enabled then return end
+    SkateState.Enabled = false
+    if SkateState.Connection then
+        SkateState.Connection:Disconnect()
+        SkateState.Connection = nil
+    end
+    local char = LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.JumpPower = SkateState.OldJumpPower or 50
+        hum.WalkSpeed = SkateState.OldWalkSpeed or 15
+        pcall(function()
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end)
+    end
+    if SkateState.OldCanJump ~= nil and char then
+        char:SetAttribute("CanJump", SkateState.OldCanJump)
+    end
+    SkateRestoreLegMotors()
+    SkateState.SwingPhase = 0
+    SkateRemoveVisuals()
+    print("[SKATE] Effect: OFF")
+end
+local function SkateSetMode(newMode)
+    local wasEnabled = SkateState.Enabled
+    if wasEnabled then SkateDisable() end
+    SkateState.Mode = newMode
+    if wasEnabled then
+        task.wait(0.1)
+        SkateEnable()
+    end
+end
+TrackConnection(LocalPlayer.CharacterAdded:Connect(function()
+    if SkateState.Enabled then
+        task.wait(0.5)
+        SkateEnable()
+    end
+end))
+_G.SkateEffect = {
+    Enable = SkateEnable,
+    Disable = SkateDisable,
+    SetMode = SkateSetMode,
+    State = SkateState,
+}
+--============================================================
 -- UI
 --============================================================
 local UI = {}
@@ -5083,11 +5239,10 @@ task.spawn(function()
         SubTitle = LocalPlayer.Name,
         TabWidth = 150,
         Size = UDim2.fromOffset(620, 520),
-        Acrylic = false,          -- true = блюр, на части экзекуторов глючит
+        Acrylic = false,
         Theme = "Dark",
         MinimizeKey = Enum.KeyCode.RightShift,
     })
-    -- GUI скрыт, пока играет заставка; затем появляется с анимацией
     pcall(function() if Fluent.GUI then Fluent.GUI.Enabled = false end end)
     task.spawn(function()
         while not STATE.SplashReady and not Library.Unloaded do task.wait() end
@@ -5112,9 +5267,6 @@ task.spawn(function()
         Misc     = Window:AddTab({ Title = "Misc",        Icon = "wrench" }),
         Settings = Window:AddTab({ Title = "Settings",    Icon = "settings" }),
     }
-    -- Хелперы
-    -- Fluent вызывает OnChanged сразу при регистрации. Этот враппер пропускает
-    -- первый (холостой) вызов, как это было в Linoria.
     local function Bind(element, fn)
         local first = true
         element:OnChanged(function(...)
@@ -5123,7 +5275,6 @@ task.spawn(function()
         end)
         first = false
     end
-    -- Секции регистрируются по вкладкам (нужно для плавного появления функций при смене вкладки)
     local TabSections = {}
     local function Sec(tabKey, title)
         local section = Tabs[tabKey]:AddSection(title)
@@ -5132,9 +5283,6 @@ task.spawn(function()
         return section
     end
     local KeybindRegistry = {}
-    -- Замена AddToggle + AddKeyPicker(SyncToggleState = true).
-    -- Toggle-режим: клавиша переключает тумблер, GetState() = toggle.Value.
-    -- Hold-режим:   тумблер "взводит" функцию, GetState() = клавиша зажата.
     local function AddToggleKey(section, id, cfg, keyId, keyCfg)
         local toggle = section:AddToggle(id, cfg)
         local mode = keyCfg.Mode or "Toggle"
@@ -5159,19 +5307,11 @@ task.spawn(function()
         })
         return toggle, kb
     end
-    -- Небольшая пауза между секциями меню: сборка не забивает один кадр целиком
     local function Yield() RunService.Heartbeat:Wait() end
-    --============================================================
-    -- KEYBIND LIST  (замена "Show Keybinds" из Linoria; цвета следуют теме Fluent)
-    --============================================================
     local KeybindList = {
         Gui = nil, Frame = nil, Stroke = nil, Title = nil,
         Rows = {}, Visible = false, Last = 0, Theme = nil, Palette = nil,
     }
-    -- Палитры под встроенные темы Fluent (подтверждено в исходнике Fluent):
-    --   Dark, Darker, Light, Aqua, Amethyst, Rose
-    -- Текст списка биндов ВСЕГДА фиолетовый (активные — яркий, неактивные — приглушённый),
-    -- от темы зависит только фон.
     local KB_PURPLE     = Color3.fromRGB(170, 110, 255)
     local KB_PURPLE_OFF = Color3.fromRGB(120, 90, 170)
     local KB_PALETTES = {
@@ -5275,7 +5415,6 @@ task.spawn(function()
             lbl.Parent = frame
             table.insert(KeybindList.Rows, { entry = entry, label = lbl })
         end
-        -- перетаскивание за заголовок
         local dragging, dragStart, startPos = false, nil, nil
         title.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -5300,7 +5439,6 @@ task.spawn(function()
         KeybindList.Title = title
         ApplyKBTheme()
     end
-    -- обновление ~7 раз в секунду и только пока список виден; заодно следим за сменой темы
     TrackConnection(RunService.Heartbeat:Connect(function()
         if Library.Unloaded or not KeybindList.Visible then return end
         if tick() - KeybindList.Last < 0.15 then return end
@@ -5309,12 +5447,6 @@ task.spawn(function()
         if name ~= KeybindList.Theme then pcall(ApplyKBTheme) end
         pcall(UpdateKeybindList)
     end))
-    --============================================================
-    -- WATERMARK  (плашка: FPS | пинг | LOLHAX | ник | аватар)
-    --============================================================
-    -- Лёгкая плашка в стиле оверлея: обновляется 2 раза в секунду и меняет текст,
-    -- только если значение изменилось. FPS считается по кадрам за полсекунды (RenderStepped),
-    -- пинг берётся из Stats (Data Ping), а если он недоступен — из GetNetworkPing().
     local Watermark = {
         Gui = nil, Frame = nil, FrameStroke = nil, Visible = false,
         Frames = 0, Acc = 0, Fps = 0, Ping = 0,
@@ -5370,14 +5502,6 @@ task.spawn(function()
         gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
         local okp = pcall(function() gui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
         if not okp or not gui.Parent then gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
-        -- BLUR / ACRYLIC: визуальный эффект ПРЯМО НА ПЛАШКЕ (не глобальный!).
-        -- ПРОБЛЕМА: Lighting.BlurEffect размывает ВЕСЬ ЭКРАН, а не только область плашки.
-        -- РЕШЕНИЕ: НЕ создаём BlurEffect в Lighting вообще.
-        -- Вместо этого, визуальный acrylic-стиль на самой плашке:
-        --   * полупрозрачный фон плашки (BackgroundTransparency уже стоит)
-        --   * полупрозрачный UIStroke с цветом фиолетового акцента (уже есть)
-        --   * UIStroke с толстым бордюром с акцентным цветом (можно "blur" имитировать)
-        -- УБРАНО: BlurEffect (было "весь экран блюрит но не Watermark").
         local frame = Instance.new("Frame")
         frame.Name = "Pill"
         frame.Active = true
@@ -5390,16 +5514,12 @@ task.spawn(function()
         local corner = Instance.new("UICorner")
         corner.CornerRadius = UDim.new(1, 0)
         corner.Parent = frame
-        -- ГЛОБАЛЬНЫЙ BLUR УБРАН: больше не создаём BlurEffect в Lighting.
-        -- Вместо него: acrylic-стиль на самой плашке через UIStroke с акцентным цветом
-        -- + полупрозрачный фон. Опция WM_Blur / WM_BlurSize больше ничего не размывает
-        -- глобально, поэтому "весь экран блюрит но не Watermark" больше не происходит.
         local stroke = Instance.new("UIStroke")
         stroke.Color = WM_ACCENT
         stroke.Transparency = 0.6
         stroke.Thickness = 1
         stroke.Parent = frame
-        Watermark.FrameStroke = stroke -- храним ссылку для WMApplyEffectState
+        Watermark.FrameStroke = stroke
         local pad = Instance.new("UIPadding")
         pad.PaddingLeft = UDim.new(0, 12)
         pad.PaddingRight = UDim.new(0, 5)
@@ -5434,7 +5554,6 @@ task.spawn(function()
             s.Parent = frame
             return s
         end
-        -- значок FPS: 3 полоски, как у сигнала
         local bars = Instance.new("Frame")
         bars.LayoutOrder = NextOrder()
         bars.Size = UDim2.fromOffset(13, 12)
@@ -5455,7 +5574,6 @@ task.spawn(function()
         end
         Watermark.Labels.Fps = Label("-- FPS")
         Separator()
-        -- значок пинга: цветная точка (зелёная / жёлтая / красная)
         local dot = Instance.new("Frame")
         dot.LayoutOrder = NextOrder()
         dot.Size = UDim2.fromOffset(8, 8)
@@ -5472,7 +5590,6 @@ task.spawn(function()
         local nameSep = Separator()
         local nameLabel = Label(LocalPlayer.Name, WM_TEXT)
         Watermark.NameItems = { nameSep, nameLabel }
-        -- аватар игрока (круглый)
         local avatar = Instance.new("ImageLabel")
         avatar.LayoutOrder = NextOrder()
         avatar.Size = UDim2.fromOffset(20, 20)
@@ -5495,7 +5612,6 @@ task.spawn(function()
             end)
             if ok and img and avatar.Parent then avatar.Image = img end
         end)
-        -- перетаскивание мышью/пальцем
         local dragging, dragStart, startPos = false, nil, nil
         frame.InputBegan:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -5520,20 +5636,12 @@ task.spawn(function()
         WMApplyPosition()
         WMApplyOptions()
     end
-    -- ЕДИНАЯ ФУНКЦИЯ СОСТОЯНИЯ ВИЗУАЛЬНОГО ACRYLIC ЭФФЕКТА НА ПЛАШКЕ.
-    -- Все точки изменения (build, SetWatermarkVisible, WM_Blur, WM_BlurSize, config load)
-    -- вызывают ЭТУ функцию, поэтому нет конфликтов, когда эффект включается при скрытом watermark.
-    -- ГЛОБАЛЬНЫЙ BlurEffect УБРАН: больше не размываем весь экран. Вместо него
-    -- acrylic-стиль — это уже цвет фона плашки + акцентный UIStroke. Опции WM_Blur /
-    -- WM_BlurSize теперь управляют ТОЛЬКО визуальным эффектом плашки (не глобально).
     local function WMApplyEffectState()
         local active = Watermark.Visible
             and (Toggles.WM_Blur and Toggles.WM_Blur.Value)
             and ((Options.WM_BlurSize and Options.WM_BlurSize.Value or 12) > 0)
-        -- Управляем acrylic-стилем плашки: меняем фон (потемнее при active) и толщину stroke.
         if Watermark.Frame then
             if active then
-                -- «акриловый» вид: чуть более непрозрачный фон + толще бордюр
                 Watermark.Frame.BackgroundTransparency = 0.05
                 if Watermark.FrameStroke then
                     Watermark.FrameStroke.Transparency = 0.35
@@ -5541,7 +5649,6 @@ task.spawn(function()
                     Watermark.FrameStroke.Thickness = math.clamp(size / 8, 1, 3)
                 end
             else
-                -- обычный вид
                 Watermark.Frame.BackgroundTransparency = 0.15
                 if Watermark.FrameStroke then
                     Watermark.FrameStroke.Transparency = 0.6
@@ -5551,22 +5658,17 @@ task.spawn(function()
         end
     end
     local function UpdateWatermark()
-        -- Акриловый эффект управляется ЕДИНОЙ функцией состояния (не каждый кадр).
-        -- BlurEffect — глобальный постпроцессинг, поэтому достаточно включить/выключить
-        -- при изменении состояния (WMApplyEffectState вызывается из всех точек).
         local fps, ping = Watermark.Fps, Watermark.Ping
         local fpsText = tostring(fps) .. " FPS"
         if Watermark.Labels.Fps.Text ~= fpsText then Watermark.Labels.Fps.Text = fpsText end
         local pingText = tostring(ping) .. " ms"
         if Watermark.Labels.Ping.Text ~= pingText then Watermark.Labels.Ping.Text = pingText end
-        -- полоски FPS: 3 = 55+, 2 = 30+, 1 = ниже
         local lit = (fps >= 55 and 3) or (fps >= 30 and 2) or 1
         for i, b in ipairs(Watermark.Bars) do
             b.BackgroundTransparency = (i <= lit) and 0 or 0.7
         end
         Watermark.PingDot.BackgroundColor3 = (ping <= 120 and WM_GOOD) or (ping <= 250 and WM_MID) or WM_BAD
     end
-    -- счётчик кадров + обновление плашки 2 раза в секунду (только пока она видна)
     TrackConnection(RunService.RenderStepped:Connect(function(dt)
         if Library.Unloaded or not Watermark.Visible then return end
         Watermark.Frames += 1
@@ -5583,10 +5685,10 @@ task.spawn(function()
             BuildWatermark()
             Watermark.Gui.Enabled = true
             Watermark.Frames, Watermark.Acc = 0, 0
-            WMApplyEffectState() -- применяем acrylic-стиль при включении
+            WMApplyEffectState()
         elseif Watermark.Gui then
             Watermark.Gui.Enabled = false
-            WMApplyEffectState() -- сбрасываем acrylic-стиль при выключении
+            WMApplyEffectState()
         end
     end
     --============================================================
@@ -5695,6 +5797,11 @@ task.spawn(function()
         Title = "No Screech Damage", Default = false,
         Description = "Prevents 'Screech' from hurting you.",
     })
+    AntiSec:AddToggle("ES_AlmaBypass", {
+    Title = "Alma Bypass",
+    Default = false,
+    Description = "Блокирует мини-игру Alma (хук Lua-функций + подмена remote'ов).",
+})
     local BypassSec = Sec("Anti", "Bypass")
     BypassSec:AddToggle("AE_BypassDupe",            { Title = "Bypass Dupe", Default = false })
     BypassSec:AddToggle("AE_BypassGloombatEggs",    { Title = "Bypass Gloombat Eggs", Default = false })
@@ -5736,9 +5843,6 @@ task.spawn(function()
     })
         VisualsWorld:AddToggle("VW_NoFog", { Title = "No Fog", Default = false })
     VisualsWorld:AddToggle("VW_NoShaking", { Title = "No Shaking", Default = false })
-    --============================================================
-    -- ARROWS  (гибкие настройки, см. выше в разделе ARROWS)
-    --============================================================
     local ArrowSec = Sec("Visuals", "Arrows")
     ArrowSec:AddToggle("AR_Enabled", {
         Title = "Arrows", Default = false,
@@ -5764,9 +5868,6 @@ task.spawn(function()
     ArrowSec:AddColorpicker("AR_ItemColor", {
         Title = "Missed Item Color", Default = Color3.fromRGB(255, 215, 0),
     })
-    --============================================================
-    -- CROSSHAIR  (5 прицелов как в CS2 + обычный)
-    --============================================================
     local CrosshairSec = Sec("Visuals", "Crosshair")
     CrosshairSec:AddToggle("CH_Enabled", { Title = "Crosshair", Default = false })
     CrosshairSec:AddDropdown("CH_Style", {
@@ -5818,7 +5919,6 @@ task.spawn(function()
     VisualsTP:AddSlider("VW_ThirdPerson_X", { Title = "X Offset", Min = -10, Max = 10, Default = 1.5, Rounding = 1 })
     VisualsTP:AddSlider("VW_ThirdPerson_Y", { Title = "Y Offset", Min = -10, Max = 10, Default = 1,   Rounding = 1 })
     VisualsTP:AddSlider("VW_ThirdPerson_Z", { Title = "Z Offset", Min = -10, Max = 10, Default = 5,   Rounding = 1 })
-    -- (Auto Padlock Solver перенесён во вкладку Misc)
     Yield()
     --============================================================
     -- ESP TAB
@@ -5855,7 +5955,6 @@ task.spawn(function()
         Title = "Esp Max Distance", Min = 50, Max = 5000, Default = 1000, Rounding = 0,
     })
     Yield()
-    -- TRACERS
     local TracerSec = Sec("ESP", "Tracers")
     TracerSec:AddToggle("TR_Enabled", {
         Title = "Tracers", Default = false,
@@ -5898,7 +5997,7 @@ task.spawn(function()
         TracerColorSec:AddColorpicker("TR_Color_" .. c.key, { Title = c.title, Default = c.color })
     end
     --============================================================
-    -- MISC TAB  (простые кнопки, без биндов)
+    -- MISC TAB
     --============================================================
     local MiscSec = Sec("Misc", "Functions")
     MiscSec:AddButton({
@@ -5917,11 +6016,53 @@ task.spawn(function()
         Callback = function() MiscFuncs.PlayAgain() end,
     })
     MiscSec:AddButton({
-        Title = "Kill Character",
-        Description = "Убить своего персонажа.",
-        Callback = function() MiscFuncs.Kill() end,
+        Title = "Instant Kill (RigType R6)",
+        Description = "Мгновенно убивает персонажа через смену Humanoid.RigType на R6.",
+        Callback = function() MiscFuncs.InstantKill() end,
     })
-    -- Auto Padlock Solver (перенесён из Visuals; id те же, поэтому сохранённые конфиги работают)
+    MiscSec:AddButton({
+        Title = "Delayed Kill (Remote)",
+        Description = "Убивает через replicatesignal(LocalPlayer.Kill). Дольше, но надёжнее.",
+        Callback = function() MiscFuncs.DelayedKill() end,
+    })
+    --============================================================
+    -- SKATE EFFECT
+    --============================================================
+    local SkateSec = Sec("Misc", "Skate Effect")
+    SkateSec:AddToggle("SK_Enabled", {
+        Title = "Skate Effect", Default = false,
+        Description = "Визуальный эффект скейта. Режим 1 — спам прыжка, Режим 2 — наклон ног.",
+    })
+    SkateSec:AddDropdown("SK_Mode", {
+        Title = "Mode",
+        Values = { "Variant 1: Jump Spam", "Variant 2: Leg Angle" },
+        Default = "Variant 1: Jump Spam",
+        Multi = false,
+    })
+    SkateSec:AddSlider("SK_SpeedBoost", {
+        Title = "Speed Boost", Min = 0, Max = 100, Default = 25, Rounding = 0,
+    })
+    SkateSec:AddSlider("SK_SpamRate", {
+        Title = "Jump Spam Rate (sec)", Min = 0.02, Max = 0.3, Default = 0.08, Rounding = 2,
+    })
+    SkateSec:AddSlider("SK_LegAngle", {
+        Title = "Leg Angle (deg)", Min = 0, Max = 90, Default = 45, Rounding = 0,
+    })
+    SkateSec:AddSlider("SK_LegSwingSpeed", {
+        Title = "Leg Swing Speed", Min = 1, Max = 20, Default = 8, Rounding = 0,
+    })
+    SkateSec:AddDropdown("SK_LegMode", {
+        Title = "Leg Mode",
+        Values = { "Static", "Swing" },
+        Default = "Static",
+        Multi = false,
+    })
+    SkateSec:AddToggle("SK_OnlyWhenMoving", {
+        Title = "Only When Moving", Default = true,
+    })
+    SkateSec:AddToggle("SK_Visuals", {
+        Title = "Add Visuals (Sound + Particles)", Default = true,
+    })
     local PadlockSec = Sec("Misc", "Auto Padlock")
     PadlockSec:AddToggle("MY_AutoPadlock", { Title = "Auto Padlock Solver", Default = false })
     PadlockSec:AddSlider("MY_AutoPadlock_Dist", {
@@ -5929,7 +6070,7 @@ task.spawn(function()
     })
     Yield()
     --============================================================
-    -- CALLBACKS  (логика та же, :OnChanged -> Bind)
+    -- CALLBACKS
     --============================================================
     Bind(Toggles.EB_CrouchSpoof, function()
         task.spawn(function()
@@ -5969,7 +6110,6 @@ task.spawn(function()
             if root then STATE.lockedY = root.Position.Y end
         end
     end)
-    -- Speed Boost
     TrackConnection(RunService.Heartbeat:Connect(function()
         if Library.Unloaded then return end
         local toggle = Toggles.MY_SpeedBoost
@@ -5983,7 +6123,6 @@ task.spawn(function()
     Bind(Options.MY_SpeedBoost_Slider, function(value)
         STATE.SpeedBoostValue = value
     end)
-    -- начальное значение слайдера (Bind пропускает первый вызов)
     STATE.SpeedBoostValue = Options.MY_SpeedBoost_Slider.Value
     Bind(Toggles.MY_RemoveAcceleration, function(v)
         if v then CallIfReady(StartRemoveAcceleration) else CallIfReady(StopRemoveAcceleration) end
@@ -5992,6 +6131,9 @@ task.spawn(function()
     Bind(Toggles.ES_AntiLookman, function(v) if v then CallIfReady(StartAntiLookman) else CallIfReady(StopAntiLookman) end end)
     Bind(Toggles.ES_NoScreechDamage, function(v)
         if v then CallIfReady(EnableNoScreechDamage) else CallIfReady(DisableNoScreechDamage) end
+    end)
+    Bind(Toggles.ES_AlmaBypass, function(v)
+        if v then CallIfReady(AlmaBypass.Start) else CallIfReady(AlmaBypass.Stop) end
     end)
     Bind(Toggles.ER_RemoveHalt,   function(v) CallIfReady(SetHaltDisabled, v) end)
     Bind(Toggles.ER_NoHaltDamage, function(v) CallIfReady(SetHaltDamageBlocked, v) end)
@@ -6075,7 +6217,6 @@ task.spawn(function()
             if Noclip.Enabled then CallIfReady(StopNoclip) end
         end
     end)
-    -- (применение сохранённых состояний теперь выполняется ПОСЛЕ заставки и загрузки конфига — см. конец UI)
     Bind(Toggles.VW_Ambience, function()
         if Toggles.VW_Ambience.Value then
             Locks.Fullbright.targetAmbient = Options.VW_Ambience_C.Value
@@ -6120,7 +6261,6 @@ task.spawn(function()
             if char and ThirdPerson.Enabled then HideThirdPersonHead(char) end
         end
     end)
-    -- ARROWS
     Bind(Toggles.AR_Enabled, function(v)
         Arrows.Enabled = v
         if v then CallIfReady(StartArrows) else CallIfReady(StopArrows) end
@@ -6133,7 +6273,6 @@ task.spawn(function()
     Bind(Options.AR_MaxArrows, function(v) Arrows.MaxArrows = v end)
     Bind(Options.AR_RushColor, function(v) Arrows.RushColor = v end)
     Bind(Options.AR_ItemColor, function(v) Arrows.ItemColor = v end)
-    -- CROSSHAIR
     Bind(Toggles.CH_Enabled, function(v)
         Crosshair.Enabled = v
         if v then CallIfReady(StartCrosshair) else CallIfReady(StopCrosshair) end
@@ -6152,7 +6291,6 @@ task.spawn(function()
     Bind(Options.VW_ThirdPerson_X, function(v) ThirdPerson.Offset = Vector3.new(v, ThirdPerson.Offset.Y, ThirdPerson.Offset.Z) end)
     Bind(Options.VW_ThirdPerson_Y, function(v) ThirdPerson.Offset = Vector3.new(ThirdPerson.Offset.X, v, ThirdPerson.Offset.Z) end)
     Bind(Options.VW_ThirdPerson_Z, function(v) ThirdPerson.Offset = Vector3.new(ThirdPerson.Offset.X, ThirdPerson.Offset.Y, v) end)
-    -- начальные значения оффсета из слайдеров
     ThirdPerson.Offset = Vector3.new(Options.VW_ThirdPerson_X.Value, Options.VW_ThirdPerson_Y.Value, Options.VW_ThirdPerson_Z.Value)
     Bind(Toggles.GA_InstantInteract, function(v)
         InstantInteract.Enabled = v
@@ -6175,7 +6313,6 @@ task.spawn(function()
     Bind(Toggles.GA_InfiniteItems, function(v)
         InfiniteItems.Enabled = v
         if v then
-            -- сразу скан всех существующих промптов (по бюджету, без фриза) + мониторинг новых
             Watcher.Scan("InfiniteItems")
         else
             Watcher.Refresh()
@@ -6198,7 +6335,6 @@ task.spawn(function()
         local defaultList = { "Lockpick", "SkeletonKey", "Shears", "Multitool" }
         for _, name in ipairs(defaultList) do InfiniteItems.List[name] = true end
     end
-    -- Position Spoof
     TrackConnection(RunService.Heartbeat:Connect(function()
         if Library.Unloaded then return end
         local toggle = Toggles.MY_PositionSpoof
@@ -6212,7 +6348,6 @@ task.spawn(function()
     end))
     Bind(Toggles.GA_AutoInteract, function(v)
         AutoInteract.Enabled = v
-        -- при включении сбрасываем кэш, чтобы сразу учитывались все уже существующие промпты
         if v then AutoInteract.CacheVersion = AutoInteract.CacheVersion + 1 end
         Watcher.Refresh()
     end)
@@ -6220,8 +6355,6 @@ task.spawn(function()
     Bind(Options.GA_AutoInteract_Options, function(opts) AutoInteract.Options = opts end)
     Bind(Toggles.GA_AutoInteract_Debug, function(v) STATE.AutoInteractDebug = v end)
     AutoInteract.Range = Options.GA_AutoInteract_Range.Value
-    -- ESP: при включении сразу полный скан карты (раньше подсвечивалось только то,
-    -- что появилось после включения) + мониторинг новых объектов через Watcher.
     Bind(Toggles.ESP_Enabled, function(v)
         ESP.Enabled = v
         if not v then
@@ -6233,7 +6366,6 @@ task.spawn(function()
             CallIfReady(RescanEsp)
         end
     end)
-    -- Категории ESP: вкл -> сразу перескан, выкл -> убрать подсветку этой категории
     for toggleId, category in pairs(ESP_TOGGLE_CATEGORY) do
         if Toggles[toggleId] then
             Bind(Toggles[toggleId], function(v)
@@ -6258,12 +6390,10 @@ task.spawn(function()
     end)
     Bind(Options.ESP_TextSize, function(v)
         ESP.TextSize = v
-        -- ОПТИМИЗАЦИЯ: перебираем только свои ESP-метки, а не все объекты Workspace
         for _, data in pairs(ESPRegistry) do
             if data.label and data.label.Parent then data.label.TextSize = v end
         end
     end)
-    -- TRACERS
     local function SyncTracerOptions()
         Tracers.Origin = (Options.TR_Origin and Options.TR_Origin.Value) or "Crosshair"
         Tracers.Thickness = (Options.TR_Thickness and Options.TR_Thickness.Value) or 1.5
@@ -6304,14 +6434,12 @@ task.spawn(function()
         local opt = Options["TR_Color_" .. c.key]
         if opt then Bind(opt, function() SyncTracerOptions() end) end
     end
-    -- DOOR REACH
     Bind(Toggles.MY_DoorReach, function(v)
         DoorReach.Enabled = v
         DoorReach.Distance = Options.MY_DoorReach_Dist.Value or 75
     end)
     Bind(Options.MY_DoorReach_Dist, function(v) DoorReach.Distance = v end)
     DoorReach.Distance = Options.MY_DoorReach_Dist.Value or 75
-    -- NOTIFIER: при включении сразу проверяем уже существующие объекты, а не только новые
     Bind(Toggles.GN_Enabled, function(v)
         if v then Watcher.Scan("EntityNotifier") else Watcher.Refresh() end
     end)
@@ -6325,6 +6453,35 @@ task.spawn(function()
             if Options.GN_NotificationAlignment.Value == "Left" then Alignment = 1
             elseif Options.GN_NotificationAlignment.Value == "Right" then Alignment = 0 end
             v.AnchorPoint = Vector2.new(Alignment, 0.5)
+        end
+    end)
+    --============================================================
+    -- SKATE EFFECT BINDS
+    --============================================================
+    Bind(Toggles.SK_Enabled, function(v)
+        if v then SkateEnable() else SkateDisable() end
+    end)
+    Bind(Options.SK_Mode, function(v)
+        local newMode = (v == "Variant 2: Leg Angle") and "LegAngle" or "Jump"
+        SkateSetMode(newMode)
+    end)
+    Bind(Options.SK_SpeedBoost, function(v)
+        SkateState.SpeedBoost = v
+        if SkateState.Enabled then
+            local char = LocalPlayer.Character
+            local hum = char and char:FindFirstChildOfClass("Humanoid")
+            if hum then hum.WalkSpeed = (SkateState.OldWalkSpeed or 15) + v end
+        end
+    end)
+    Bind(Options.SK_SpamRate, function(v) SkateState.SpamRate = v end)
+    Bind(Options.SK_LegAngle, function(v) SkateState.LegAngle = v end)
+    Bind(Options.SK_LegSwingSpeed, function(v) SkateState.LegSwingSpeed = v end)
+    Bind(Options.SK_LegMode, function(v) SkateState.LegMode = v end)
+    Bind(Toggles.SK_OnlyWhenMoving, function(v) SkateState.OnlyWhenMoving = v end)
+    Bind(Toggles.SK_Visuals, function(v)
+        SkateState.AddVisuals = v
+        if SkateState.Enabled then
+            if v then SkateAddVisuals() else SkateRemoveVisuals() end
         end
     end)
     Yield()
@@ -6371,28 +6528,24 @@ task.spawn(function()
         Default = "Top Right", Multi = false,
     })
     Bind(Toggles.WM_Enabled, function(v)
-        if v and not STATE.SplashReady then return end -- покажется после заставки
+        if v and not STATE.SplashReady then return end
         SetWatermarkVisible(v)
     end)
     Bind(Toggles.WM_ShowName, function() WMApplyOptions() end)
     Bind(Toggles.WM_ShowAvatar, function() WMApplyOptions() end)
     Bind(Options.WM_Position, function() WMApplyPosition() end)
     Bind(Toggles.WM_Blur, function(v)
-        -- акриловый эффект управляется ЕДИНОЙ функцией состояния
         WMApplyEffectState()
     end)
     Bind(Options.WM_BlurSize, function(v)
-        -- акриловый эффект управляется ЕДИНОЙ функцией состояния
         WMApplyEffectState()
     end)
-    -- первое появление — после заставки (Bind пропускает стартовый вызов)
     task.spawn(function()
         while not STATE.SplashReady and not Library.Unloaded do task.wait(0.1) end
         if Library.Unloaded then return end
         if Toggles.WM_Enabled and Toggles.WM_Enabled.Value then SetWatermarkVisible(true) end
     end)
     local MenuSec = Sec("Settings", "Menu")
-    -- Полная очистка. Вызывается один раз: и из кнопки Unload, и при закрытии окна крестиком.
     local function DoUnload()
         if STATE.Unloading then return end
         STATE.Unloading = true
@@ -6421,6 +6574,8 @@ task.spawn(function()
         CallIfReady(StopSpeedBoostAbysall)
         CallIfReady(StopRemoveAcceleration)
         CallIfReady(DisableNoScreechDamage)
+        CallIfReady(AlmaBypass.Stop)
+        CallIfReady(SkateDisable)
         if InstantInteract.Connection then
             InstantInteract.Connection:Disconnect()
             InstantInteract.Connection = nil
@@ -6469,25 +6624,19 @@ task.spawn(function()
         if KeybindList.Gui then pcall(function() KeybindList.Gui:Destroy() end) end
         if Watermark.Gui then pcall(function() Watermark.Gui:Destroy() end) end
         Watermark.Visible = false
-        -- выгрузка визуального acrylic-эффекта (просто сбрасываем stroke на плашке)
         if Watermark.FrameStroke then
             pcall(function()
                 Watermark.FrameStroke.Transparency = 0.6
                 Watermark.FrameStroke.Thickness = 1
             end)
         end
-        -- выгрузка Arrows и Crosshair (GUI + эффекты)
         CallIfReady(StopArrows)
         CallIfReady(StopCrosshair)
-        -- восстановление стандартного прицела Doors (если мы его скрывали)
         pcall(RestoreDefaultCrosshair)
-        -- восстановление головы (если ThirdPerson прятал её)
         if next(ThirdPersonHidden) ~= nil then RestoreThirdPersonHead() end
         pcall(RestoreThirdPersonSession)
         if STATE.SplashGui then pcall(function() STATE.SplashGui:Destroy() end) end
     end
-    -- Закрытие крестиком: Fluent сам показывает окно подтверждения и уничтожает GUI,
-    -- а мы по факту уничтожения GUI выполняем очистку.
     pcall(function()
         if Fluent.GUI then Fluent.GUI.Destroying:Connect(DoUnload) end
     end)
@@ -6495,7 +6644,6 @@ task.spawn(function()
         Title = "Unload",
         Description = "Отключает все функции и закрывает меню",
         Callback = function()
-            -- То же окно подтверждения, что и при закрытии крестиком
             Window:Dialog({
                 Title = "Close",
                 Content = "Are you sure you want to unload the interface?",
@@ -6515,10 +6663,8 @@ task.spawn(function()
             })
         end,
     })
-    -- Тема, прозрачность и бинд сворачивания меню (RightShift по умолчанию)
     SaveManager:SetLibrary(Fluent)
     InterfaceManager:SetLibrary(Fluent)
-    -- Любая загрузка конфига (автозагрузка и кнопка "Load config") блокируется, пока идёт заставка
     do
         local _SM_Load = SaveManager.Load
         SaveManager.Load = function(self, ...)
@@ -6535,25 +6681,9 @@ task.spawn(function()
     InterfaceManager:BuildInterfaceSection(Tabs.Settings)
     SaveManager:BuildConfigSection(Tabs.Settings)
     Window:SelectTab(1)
-    --============================================================
-    -- ПЛАВНОЕ ПОЯВЛЕНИЕ ФУНКЦИЙ ПРИ ПЕРЕКЛЮЧЕНИИ ВКЛАДОК
-    --============================================================
-    -- Почему раньше было 10-20 FPS:
-    --  * каждый элемент скрывался/показывался через Visible по одному за кадр. Каждое изменение
-    --    Visible заставляло Fluent пересчитывать раскладку всей вкладки (AutomaticSize у элементов,
-    --    размер секции, CanvasSize у ScrollingFrame) — много перерасчётов каждый кадр;
-    --  * появление начиналось, пока Fluent ещё держит вкладку внутри CanvasGroup (своя анимация
-    --    смены вкладки), и CanvasGroup перерисовывал весь холст на каждое изменение.
-    -- Новая версия:
-    --  * ничего не скрывается и размеры не меняются -> никаких перерасчётов раскладки;
-    --  * каждая секция плавно "въезжает" сбоку с небольшой задержкой друг за другом (каскад)
-    --    через UIPadding: PaddingLeft = +x и PaddingRight = -x, т.е. ширина секции остаётся
-    --    прежней (текст не переносится, высота не пересчитывается);
-    --  * анимацию ведёт TweenService на стороне движка (C++), а не Lua-цикл по кадрам,
-    --    поэтому она плавная при любом FPS; прозрачность даёт штатный fade Fluent.
-    local REVEAL_SHIFT   = 22      -- на сколько пикселей секция смещена в начале
-    local REVEAL_TIME    = 0.34    -- длительность въезда одной секции
-    local REVEAL_STAGGER = 0.05    -- задержка между соседними секциями (каскад)
+    local REVEAL_SHIFT   = 22
+    local REVEAL_TIME    = 0.34
+    local REVEAL_STAGGER = 0.05
     local RevealInfo = TweenInfo.new(REVEAL_TIME, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
     local RevealPads, RevealTweens, RevealGen = {}, {}, {}
     local function GetSectionPads(tabKey)
@@ -6593,7 +6723,7 @@ task.spawn(function()
                 local pads = GetSectionPads(tabKey)
                 if #pads == 0 then return end
                 ResetPads(pads)
-                if not container.Visible then return end -- вкладку закрыли: всё на месте
+                if not container.Visible then return end
                 for _, p in ipairs(pads) do
                     p.PaddingLeft = UDim.new(0, REVEAL_SHIFT)
                     p.PaddingRight = UDim.new(0, -REVEAL_SHIFT)
@@ -6614,7 +6744,6 @@ task.spawn(function()
         end)
     end
     STATE.UIBuilt = true
-    -- Конфиг грузится ТОЛЬКО после того, как заставка полностью закончилась
     task.spawn(function()
         while not STATE.SplashDone and not Library.Unloaded do task.wait(0.1) end
         if Library.Unloaded then return end
@@ -6661,7 +6790,20 @@ task.spawn(function()
             if Options.CH_OutlineColor and Options.CH_OutlineColor.Value then Crosshair.OutlineColor = Options.CH_OutlineColor.Value end
             CallIfReady(StartCrosshair)
         end
+        if Toggles.SK_Enabled and Toggles.SK_Enabled.Value then
+            local mode = (Options.SK_Mode and Options.SK_Mode.Value == "Variant 2: Leg Angle") and "LegAngle" or "Jump"
+            SkateState.Mode = mode
+            SkateState.SpeedBoost = (Options.SK_SpeedBoost and Options.SK_SpeedBoost.Value) or 25
+            SkateState.SpamRate = (Options.SK_SpamRate and Options.SK_SpamRate.Value) or 0.08
+            SkateState.LegAngle = (Options.SK_LegAngle and Options.SK_LegAngle.Value) or 45
+            SkateState.LegSwingSpeed = (Options.SK_LegSwingSpeed and Options.SK_LegSwingSpeed.Value) or 8
+            SkateState.LegMode = (Options.SK_LegMode and Options.SK_LegMode.Value) or "Static"
+            SkateState.OnlyWhenMoving = not (Toggles.SK_OnlyWhenMoving and Toggles.SK_OnlyWhenMoving.Value == false)
+            SkateState.AddVisuals = not (Toggles.SK_Visuals and Toggles.SK_Visuals.Value == false)
+            SkateEnable()
+        end
         if Toggles.ES_NoScreechDamage and Toggles.ES_NoScreechDamage.Value then CallIfReady(EnableNoScreechDamage) end
+        if Toggles.ES_AlmaBypass and Toggles.ES_AlmaBypass.Value then CallIfReady(AlmaBypass.Start) end
         if Toggles.ES_AntiEyes and Toggles.ES_AntiEyes.Value then CallIfReady(StartAntiEyes) end
         if Toggles.ES_AntiLookman and Toggles.ES_AntiLookman.Value then CallIfReady(StartAntiLookman) end
         if Toggles.MH_Enabled and Toggles.MH_Enabled.Value then CallIfReady(StartMonsterHighlight) end
@@ -6678,7 +6820,6 @@ task.spawn(function()
         if Toggles.AE_BypassBanana and Toggles.AE_BypassBanana.Value then AntiEntityState.BypassBanana = true; ScanAntiEntities() end
         if Toggles.AE_BypassJeff and Toggles.AE_BypassJeff.Value then AntiEntityState.BypassJeff = true; ScanAntiEntities() end
         if Toggles.AS_Anchor and Toggles.AS_Anchor.Value then CallIfReady(StartAutoSolveAnchors) end
-        -- новые функции: применяем сохранённые состояния и сразу сканируем то, что уже есть на карте
         if Toggles.MY_DoorReach and Toggles.MY_DoorReach.Value then
             DoorReach.Enabled = true
             DoorReach.Distance = Options.MY_DoorReach_Dist.Value or 75
@@ -6699,5 +6840,5 @@ task.spawn(function()
     while not STATE.SplashReady and not Library.Unloaded do task.wait(0.1) end
     task.wait(1.2)
     if Library.Unloaded then return end
-    Notify("Load successful.", "LOLHAX LITE v1.8 + Abysall Speed/PositionSpoof.", 5, true)
+    Notify("Load successful.", "LOLHAX LITE v1.8 + Abysall Speed/PositionSpoof + Skate.", 5, true)
 end)
